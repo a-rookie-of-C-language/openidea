@@ -312,6 +312,7 @@ const pytest: RunConfigTypeContribution = {
   label: "pytest",
   icon: "file-python",
   description: "Run pytest tests",
+  defaults: { command: "pytest" },
   debugAdapter: "debugpy",
   fields: [
     {
@@ -348,11 +349,12 @@ const pytest: RunConfigTypeContribution = {
     if (c.kind !== "pytest") return null;
     // The runner part (`run pytest`, `-m pytest`, none when the command is
     // pytest itself); what follows is the target and pytest options.
+    const m = c.args.indexOf("-m");
     const runner =
       c.args[0] === "run" && c.args[1] === "pytest"
         ? 2
-        : c.args[0] === "-m" && c.args[1] === "pytest"
-          ? 2
+        : m >= 0 && c.args[m + 1] === "pytest"
+          ? m + 2
           : baseName(c.command).replace(/\.exe$/i, "") === "pytest"
             ? 0
             : null;
@@ -362,7 +364,7 @@ const pytest: RunConfigTypeContribution = {
     return {
       command: c.command,
       runnerArgs: formatArgs(c.args.slice(0, runner)),
-      target: target && !target.startsWith("-") ? target : "",
+      target: target && !target.startsWith("-") ? formatArgs([target]) : "",
       options: formatArgs(target && !target.startsWith("-") ? options : rest),
     };
   },
