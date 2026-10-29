@@ -218,6 +218,22 @@ pub fn executable_names(name: &str, windows: bool, pathext: Option<&str>) -> Vec
     exts.iter().map(|e| format!("{name}{}", e.to_ascii_lowercase())).collect()
 }
 
+/// The full path to `command`, resolved against `search` (`PATH` as a child sees it).
+/// On Windows a bare name also gets `PATHEXT` extensions tried (`codex` → `codex.cmd`),
+/// which `std::process::Command` would only try as `.exe`. `command` is returned
+/// unchanged when it carries a path or nothing on `search` matches.
+pub fn resolve_command(command: &str, search: &std::ffi::OsStr) -> std::path::PathBuf {
+    let path = std::path::Path::new(command);
+    if path.components().count() > 1 || path.is_absolute() {
+        return path.to_path_buf();
+    }
+    let names = executable_names(command, cfg!(windows), host_var_os("PATHEXT").as_deref().and_then(|p| p.to_str()));
+    std::env::split_paths(search)
+        .filter(|d| !d.as_os_str().is_empty())
+        .find_map(|dir| names.iter().map(|n| dir.join(n)).find(|p| p.is_file()))
+        .unwrap_or_else(|| path.to_path_buf())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,5 +378,29 @@ mod tests {
         cmd.env("PATH", "/custom");
         prepare(&mut cmd);
         assert_eq!(cmd.get_envs().find(|(k, _)| *k == "PATH").and_then(|(_, v)| v), Some(OsStr::new("/custom")));
+    }
+
+    #[test]
+    fn resolve_command_finds_bare_names_on_the_given_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        let b = dir.path().join("b");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(a.join("agent"), "#!/bin/sh\n").unwrap();
+        std::fs::write(b.join("agent.cmd"), "@echo off\n").unwrap();
+        let search = std::env::join_paths([&a, &b]).unwrap();
+        if cfg!(windows) {
+            // The `.cmd` shim wins over a POSIX script `Command` can't start.
+            assert_eq!(resolve_command("agent", &search), b.join("agent.cmd"));
+        } else {
+            assert_eq!(resolve_command("agent", &search), a.join("agent"));
+        }
+        assert_eq!(resolve_command("nope", &search), std::path::PathBuf::from("nope"));
+        assert_eq!(
+            resolve_command("bin/agent", &search),
+            std::path::PathBuf::from("bin/agent"),
+            "a command with a path is kept"
+        );
     }
 }
