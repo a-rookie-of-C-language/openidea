@@ -26,13 +26,30 @@ pub(crate) fn newest_install(command: &str) -> String {
     if Path::new(command).components().count() > 1 {
         return command.to_owned();
     }
+    // Windows: `Command` doesn't walk PATHEXT (it only tries `.exe`), and an
+    // extensionless npm shim is a POSIX script it can't run — resolve like cmd would.
+    let names: Vec<String> = if cfg!(windows) {
+        let pathext = ide_core::process::host_var_os("PATHEXT")
+            .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into())
+            .to_string_lossy()
+            .into_owned();
+        let exts: Vec<String> =
+            pathext.split(';').map(str::trim).filter(|e| e.starts_with('.')).map(|e| e.to_ascii_lowercase()).collect();
+        if exts.iter().any(|e| command.to_ascii_lowercase().ends_with(e.as_str())) {
+            vec![command.to_owned()]
+        } else {
+            exts.iter().map(|e| format!("{command}{e}")).collect()
+        }
+    } else {
+        vec![command.to_owned()]
+    };
     let path = ide_core::process::host_var_os("PATH")
         .or_else(|| ide_core::process::shell_env().find(|(k, _)| *k == "PATH").map(|(_, v)| v.to_owned()));
     let mut seen = Vec::new();
     let candidates: Vec<PathBuf> = path
         .iter()
         .flat_map(std::env::split_paths)
-        .map(|dir| dir.join(command))
+        .flat_map(|dir| names.iter().map(move |n| dir.join(n)))
         .filter(|p| p.is_file())
         .filter(|p| {
             let real = dunce::canonicalize(p).unwrap_or_else(|_| p.clone());
@@ -42,7 +59,9 @@ pub(crate) fn newest_install(command: &str) -> String {
         })
         .collect();
     if candidates.len() < 2 {
-        return command.to_owned();
+        // Bare `command` resolves on Unix; on Windows the found file's exact name
+        // (`claude.cmd`) is what `Command` can start.
+        return candidates.first().map_or_else(|| command.to_owned(), |p| p.to_string_lossy().into_owned());
     }
     candidates
         .into_iter()

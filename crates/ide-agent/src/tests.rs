@@ -210,8 +210,8 @@ async fn commands_are_remembered_per_project_and_merged_with_skills_on_disk() {
     let names = |c: Vec<AgentCommand>| c.into_iter().map(|c| c.name).collect::<Vec<_>>();
 
     let mgr_a = manager_at(&a, &models, Arc::new(FakeAgent::default()));
-    // Before any session: the skills on disk.
-    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["triage"]);
+    // Before any session: the agent's builtins plus the skills on disk.
+    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["compact", "triage"]);
     let task = mgr_a
         .create(NewAgentTask {
             prompt: text("Fix the lexer"),
@@ -223,8 +223,8 @@ async fn commands_are_remembered_per_project_and_merged_with_skills_on_disk() {
         .await
         .unwrap();
     wait_for(&mgr_a, &task.id, AgentStatus::NeedsInput).await;
-    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["review", "triage"]);
-    assert_eq!(names(mgr_a.commands("claude", Some(&task.id)).await.unwrap()), ["review", "triage"]);
+    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["review", "compact", "triage"]);
+    assert_eq!(names(mgr_a.commands("claude", Some(&task.id)).await.unwrap()), ["review", "compact", "triage"]);
     // Other agents get only what they offered.
     assert!(mgr_a.commands("codex", None).await.unwrap().is_empty());
     mgr_a.shutdown();
@@ -234,7 +234,8 @@ async fn commands_are_remembered_per_project_and_merged_with_skills_on_disk() {
     let claude = mgr_b.providers().into_iter().find(|p| p.id == "claude").unwrap();
     assert_eq!(claude.config.len(), 2);
     assert!(claude.commands.is_empty());
-    assert!(mgr_b.commands("claude", None).await.unwrap().is_empty());
+    // No skills on disk here, but the agent's builtins still show.
+    assert_eq!(names(mgr_b.commands("claude", None).await.unwrap()), ["compact"]);
     let mgr_a = manager_at(&a, &models, Arc::new(FakeAgent::default()));
     assert_eq!(names(mgr_a.providers().into_iter().find(|p| p.id == "claude").unwrap().commands), ["review"]);
 }
