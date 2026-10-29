@@ -325,6 +325,14 @@ impl AgentManager {
             }
             None => (provider.to_owned(), self.shared.known_commands(provider), self.shared.paths.project_root.clone()),
         };
+        // Commands the agent implements itself and never lists (its CLI builtins):
+        // merged without duplicating what `availableCommands` or the disk offer.
+        let mut offered = offered;
+        for &(name, description) in builtin_commands(&provider) {
+            if !offered.iter().any(|c| c.name == name) {
+                offered.push(AgentCommand { name: name.to_owned(), description: description.to_owned(), hint: None });
+            }
+        }
         if provider != "claude" && provider != "claude-acp" {
             return Ok(offered);
         }
@@ -1627,6 +1635,16 @@ fn retry_of(update: &Value, now: f64) -> Option<AgentRetry> {
 
 fn model_of(config: &[AgentConfigOption]) -> Option<String> {
     config.iter().find(|o| o.category.as_deref() == Some("model")).and_then(|o| o.current.clone())
+}
+
+/// Commands the agent implements on its own and never lists in `availableCommands` —
+/// its CLI builtins, passed through as prompt text (e.g. `/compact`). `(name, description)`.
+fn builtin_commands(provider: &str) -> &'static [(&'static str, &'static str)] {
+    match provider {
+        "claude" | "claude-acp" => &[("compact", "compact the conversation")],
+        "opencode" | "opencode2" => &[("compact", "compact the conversation"), ("loop", "run a prompt on a schedule")],
+        _ => &[],
+    }
 }
 
 fn file_name(path: &Path) -> String {
