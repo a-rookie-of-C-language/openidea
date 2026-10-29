@@ -348,7 +348,7 @@ fn resolve_spawn_program(command: &str, env: &[(String, String)]) -> std::path::
         .or_else(|| ide_core::process::shell_env().find(|(k, _)| k == "PATH").map(|(_, v)| v))
         .or_else(|| ide_core::process::host_var_os("PATH"))
         .unwrap_or_default();
-    ide_core::process::resolve_command(command, &search)
+    ide_core::process::find_executable(command, &search).unwrap_or_else(|| path.to_path_buf())
 }
 
 impl Peer {
