@@ -29,6 +29,16 @@ describe("keymap", () => {
     expect(formatBinding("Ctrl+NumpadSubtract", false)).toBe("Ctrl+NumPad -");
   });
 
+  it("names letters by the character typed, so AZERTY's Ctrl+Z is not Ctrl+W", () => {
+    // AZERTY: the key typing "z" is physically KeyW.
+    expect(strokeOf({ code: "KeyW", key: "z", metaKey: false, ctrlKey: true, altKey: false, shiftKey: false })).toBe(
+      "Ctrl+Z",
+    );
+    expect(strokeOf({ code: "KeyW", key: "Z", metaKey: false, ctrlKey: true, altKey: false, shiftKey: true })).toBe(
+      "Ctrl+Shift+Z",
+    );
+  });
+
   it("uses physical key codes", () => {
     expect(strokeOf({ code: "KeyF", key: "ƒ", metaKey: false, ctrlKey: false, altKey: true, shiftKey: false })).toBe(
       "Alt+F",
