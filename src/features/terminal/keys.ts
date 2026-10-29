@@ -60,9 +60,9 @@ export function terminalKeyAction(e: KeyLike, hasSelection: boolean): TerminalKe
     if (e.code === "KeyT") return { kind: "pass" };
   }
   if (ctrl && !meta && !alt) {
-    // Use the physical key so layouts and Shift don't change the control code.
-    const m = /^Key([A-Z])$/.exec(e.code);
-    if (m) return { kind: "send", data: String.fromCharCode(m[1]!.charCodeAt(0) - 64) };
+    // The letter the key types, so Shift doesn't change the control code and AZERTY's Ctrl+Z is ^Z, not ^W.
+    const letter = /^[a-zA-Z]$/.test(e.key) ? e.key : /^Key([A-Z])$/.exec(e.code)?.[1];
+    if (letter) return { kind: "send", data: String.fromCharCode(letter.toUpperCase().charCodeAt(0) - 64) };
     if (e.code === "BracketLeft") return { kind: "send", data: "\x1b" };
     if (e.code === "Backslash") return { kind: "send", data: "\x1c" };
     if (e.code === "BracketRight") return { kind: "send", data: "\x1d" };

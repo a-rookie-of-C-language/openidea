@@ -258,7 +258,10 @@ export function strokeOf(
   e: Pick<KeyboardEvent, "code" | "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
 ): string | null {
   let key: string | undefined;
-  if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3);
+  // A letter is named by the character it types: on AZERTY the Z key sits on the physical KeyW,
+  // so Ctrl+Z must not read as Ctrl+W. Alt combos may type a symbol (⌥ on macOS, AltGr), so they keep the physical key.
+  if (/^[a-zA-Z]$/.test(e.key) && !e.altKey) key = e.key.toUpperCase();
+  else if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3);
   else if (/^Digit\d$/.test(e.code)) key = e.code.slice(5);
   else if (/^Numpad\d$/.test(e.code)) key = e.code.slice(6);
   else if (/^F\d{1,2}$/.test(e.code)) key = e.code;

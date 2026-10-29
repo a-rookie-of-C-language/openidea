@@ -128,6 +128,11 @@ describe("terminal keys", () => {
       kind: "send",
       data: "\x14",
     });
+    // AZERTY: the key typing "z" is physically KeyW; Ctrl+Z must send ^Z (SIGTSTP), not ^W.
+    expect(terminalKeyAction(key({ key: "z", code: "KeyW", ctrlKey: true }), false)).toEqual({
+      kind: "send",
+      data: "\x1a",
+    });
   });
 
   it("implements macOS conveniences", () => {
