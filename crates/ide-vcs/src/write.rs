@@ -31,25 +31,28 @@ impl Repo {
     }
 }
 
-/// Runs a path-taking git command with literal pathspecs.
+/// Runs a path-taking git command with literal pathspecs, in as many invocations as
+/// the platform's command-line limit needs (a large rollback would otherwise fail with
+/// `os error 206` on Windows).
 fn run_paths(r: &Repo, args: &[&str], paths: &[String]) -> IdeResult<()> {
-    if paths.is_empty() {
-        return Ok(());
-    }
-    let mut full: Vec<&str> = vec!["--literal-pathspecs"];
-    full.extend_from_slice(args);
-    full.push("--");
-    full.extend(paths.iter().map(String::as_str));
-    run(r.root(), &full, None).map(|_| ())
+    let mut base: Vec<&str> = vec!["--literal-pathspecs"];
+    base.extend_from_slice(args);
+    base.push("--");
+    cli::run_paths(r.root(), &base, paths).map(|_| ())
 }
 
 pub(crate) fn blame(
     r: &Repo,
     path: &Path,
     current_text: Option<&str>,
+    revision: Option<&str>,
     encoding: &'static Encoding,
 ) -> IdeResult<Vec<BlameLine>> {
     let rel = r.rel_path(path)?;
+    let revision = match revision {
+        Some(rev) => check_rev(rev)?,
+        None => "HEAD",
+    };
     let disk = match std::fs::read(r.abs_path(&rel)) {
         Ok(bytes) => bytes,
         Err(_) if current_text.is_some() => Vec::new(),
@@ -74,14 +77,14 @@ pub(crate) fn blame(
     let line_count = text.split_inclusive('\n').count();
     let tracked_in_head = {
         let repo = r.gix()?;
-        crate::repo::blob_at(&repo, &rel, "HEAD")?.is_some()
+        crate::repo::blob_at(&repo, &rel, revision)?.is_some()
     };
     if !tracked_in_head {
         return Ok(uncommitted_lines(line_count));
     }
     let out = run(
         r.root(),
-        &["--literal-pathspecs", "blame", "--porcelain", "--contents", "-", "--", &rel],
+        &["--literal-pathspecs", "blame", "--porcelain", "--contents", "-", revision, "--", &rel],
         Some(&contents),
     )?;
     let mut lines = crate::blame::parse_porcelain(&out.stdout_str());

@@ -262,6 +262,15 @@ export class EditorController implements SlotHost {
           prevRoot = root;
           prevLight = s.lightEdit;
           this.saveSession();
+          if (
+            root &&
+            previous.project &&
+            !previous.project.workspace &&
+            s.project?.workspace?.projects[0] === previous.project.root
+          ) {
+            const session = loadSession(previous.project.root);
+            if (session) storeSession(root, session);
+          }
           this.sessionRoot = null;
           const generation = ++this.projectGeneration;
           const documents = customDocuments(useTabs.getState(), useContributions.getState().editorKinds);
@@ -708,6 +717,12 @@ export class EditorController implements SlotHost {
             localHistoryMenu(slot.model.path),
             gitMenu(slot.model.path),
             { kind: "separator" },
+            {
+              kind: "action",
+              action: "diff.compareWith",
+              arg: slot.model.path,
+              label: "Compare With…",
+            },
             {
               kind: "action",
               action: "diff.compareWithClipboard",
@@ -1597,6 +1612,9 @@ export class EditorController implements SlotHost {
             { kind: "separator" },
             localHistoryMenu(path),
             ...(inProject ? [gitMenu(path)] : []),
+            { kind: "separator" },
+            { kind: "action", action: "diff.compareWith", arg: path, label: "Compare With…" },
+            { kind: "action", action: "diff.compareWithClipboard", arg: { path }, label: "Compare with Clipboard" },
             { kind: "separator" },
             {
               label: "Copy Path/Reference…",
