@@ -111,6 +111,17 @@ fn discover_outside_and_inside() {
 }
 
 #[test]
+fn discover_sha256_repository() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("work");
+    std::fs::create_dir(&dir).unwrap();
+    git_in(&dir, &["init", "-q", "--object-format=sha256"]);
+    let repo = Repo::discover(&dir).unwrap().unwrap();
+    assert_eq!(std::fs::canonicalize(repo.root()).unwrap(), std::fs::canonicalize(&dir).unwrap());
+    assert!(repo.status().unwrap().is_empty());
+}
+
+#[test]
 fn repository_without_commits() {
     let fx = Fixture::new();
     fx.write("new.txt", "hello\n");
@@ -175,6 +186,9 @@ fn status_matrix() {
     fx.write("staged_del.txt", "a\n");
     fx.write("rename_me.txt", "some longer content\nthat is stable\nfor rename detection\n");
     fx.write("both.txt", "a\n");
+    // A committed file the IDE ignores keeps its history but drops out of the change list.
+    fx.write("tracked.pyc", "a\n");
+    fx.git(&["add", "-f", "tracked.pyc"]);
     fx.commit_all("base");
 
     fx.write("modified.txt", "b\n");
@@ -195,6 +209,10 @@ fn status_matrix() {
     fx.write(".DS_Store", "junk");
     fx.write("dir/.DS_Store", "junk");
     fx.write("pkg/__pycache__/m.pyc", "junk");
+    fx.write("tracked.pyc", "b\n");
+    // Contents differ from `staged_del.txt` so rename detection cannot pair them.
+    fx.write("staged_ignored.pyc", "cached\nbytecode\n");
+    fx.git(&["add", "-f", "staged_ignored.pyc"]);
 
     let repo = fx.repo();
     repo.set_ignored_names(ide_core::settings::Settings::default().ignored_names());
@@ -217,6 +235,10 @@ fn status_matrix() {
     assert_eq!(status_of(&st, "renamed.txt").renamed_from.as_deref(), Some("rename_me.txt"));
     assert!(!st.iter().any(|s| s.rel_path == "rename_me.txt"), "rename source listed: {st:#?}");
     assert!(!st.iter().any(|s| s.rel_path.contains("debug.log") || s.rel_path.contains("build")));
+    assert!(
+        !st.iter().any(|s| s.rel_path.contains("tracked.pyc") || s.rel_path.contains("staged_ignored.pyc")),
+        "{st:#?}"
+    );
     assert!(!st.iter().any(|s| s.rel_path.contains(".DS_Store") || s.rel_path.contains("pkg")), "{st:#?}");
     // Sorted by path.
     let paths: Vec<_> = st.iter().map(|s| s.rel_path.clone()).collect();
