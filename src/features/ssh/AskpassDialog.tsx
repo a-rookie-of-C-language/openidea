@@ -64,9 +64,7 @@ function AskpassDialog({ prompt: p }: { prompt: AskpassPrompt }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        {p.remember && (
-          <Checkbox checked={remember} onChange={setRemember} label={tx("Remember for this host")} />
-        )}
+        {p.remember && <Checkbox checked={remember} onChange={setRemember} label={tx("Remember for this host")} />}
       </form>
     </Dialog>
   );
