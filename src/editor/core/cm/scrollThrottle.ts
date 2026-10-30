@@ -1,9 +1,9 @@
 /**
  * Marks the editor with a `cm-scrolling` class while the user is actively
- * scrolling; expensive decorations (sticky header, indent guides) hide
- * until the wheel / trackpad rests for a moment. Keeps fast mouse-wheel
- * scrolling from rendering row after row of stale output over freshly
- * painted text.
+ * scrolling; expensive decorations (sticky header, indent guides) keep
+ * their previous paint and defer re-measuring until the wheel / trackpad
+ * rests for a moment. Keeps fast mouse-wheel scrolling from spending every
+ * frame on layout work that will be stale by the next scroll event anyway.
  */
 import { StateEffect, type Extension } from "@codemirror/state";
 import { ViewPlugin, type EditorView, type ViewUpdate } from "@codemirror/view";

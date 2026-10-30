@@ -363,7 +363,8 @@ export function baseExtensions(o: SetupOptions): Extension {
     compartments.sticky.of(stickyExtension(o.settings)),
     compartments.heavy.of(heavyExtension(o.docLength, o.settings)),
     // Flag "cm-scrolling" while the wheel is moving; expensive decorations
-    // (sticky header, indent guides, ...) hide until scrolling settles.
+    // (sticky header, indent guides, ...) keep their previous paint and
+    // defer re-measuring until scrolling settles.
     scrollThrottle,
     compartments.prefs.of(
       prefsFor({

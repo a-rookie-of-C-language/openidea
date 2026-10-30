@@ -81,9 +81,9 @@ export const indentGuides: Extension = ViewPlugin.fromClass(
         this.decorations = build(u.view);
         return;
       }
-      // During active scrolling the .cm-scrolling class hides the guide
-      // decoration anyway — skip the rebuild and re-run once scrolling
-      // settles (the trailing requestMeasure repaints with fresh ranges).
+      // During a scroll burst keep the previous decorations (stale ranges
+      // for a moment) instead of rebuilding per frame; the scrollSettled
+      // effect above triggers one rebuild once scrolling stops.
       if (u.viewportChanged && !u.view.dom.classList.contains("cm-scrolling")) this.decorations = build(u.view);
     }
   },

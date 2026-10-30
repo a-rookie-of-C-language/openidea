@@ -127,15 +127,16 @@ class StickyScroll {
       isScrollSettled(u)
     )
       this.schedule();
-    // Viewport moves during a scroll burst are wasteful: the .cm-scrolling
-    // class already hides the bar, so recompute once when scrolling stops.
+    // Viewport moves during a scroll burst are wasteful: the previous rows
+    // stay painted (just no longer aligned), so skip re-measuring until the
+    // scrollSettled effect above re-runs one pass.
     if (u.viewportChanged && !u.view.dom.classList.contains("cm-scrolling")) this.schedule();
   }
 
   private onScroll = () => {
     // The class is set by the scrollThrottle plugin on the same element;
-    // while it is up the bar is hidden anyway — re-measure on the trailing
-    // requestMeasure after scrolling settles.
+    // during a burst the stale rows stay visible instead of re-measuring
+    // every frame — catch up on the trailing update after scrolling settles.
     if (this.view.dom.classList.contains("cm-scrolling")) return;
     this.schedule();
   };
