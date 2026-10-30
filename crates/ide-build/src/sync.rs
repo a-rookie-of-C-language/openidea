@@ -123,11 +123,12 @@ pub fn apply_maven_cache(root: &Path, cache_dir: &Path, model: &mut MavenModel) 
     let Some(cache) = read_cache::<MavenCache>(cache_dir, MAVEN_CACHE) else { return };
     model.synced_at = Some(cache.at_ms);
     model.sync_error = cache.error;
-    model.stale = !cache.verbose || cache.hash != hash_files(&maven::build_files(root, model));
-    // A stale cache predates the current build files: its effective-POM plugins
-    // and resolved dependencies would hide what the POMs declare now (a just
-    // added dependency never appears). The static parse stays until Reload.
-    if model.stale {
+    let changed = cache.hash != hash_files(&maven::build_files(root, model));
+    model.stale = !cache.verbose || changed;
+    // A cache older than the current build files: its effective-POM plugins and
+    // resolved dependencies would hide what the POMs declare now (a just added
+    // dependency never appears). The static parse stays until Reload.
+    if changed {
         return;
     }
     for p in &mut model.projects {
