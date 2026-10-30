@@ -214,3 +214,28 @@ describe("siblingPositions", () => {
     ]);
   });
 });
+
+describe("Tree horizontal scrolling", () => {
+  const spacer = (tree: HTMLElement) => tree.querySelector<HTMLElement>("[data-content-width]");
+
+  it("is off unless asked for", () => {
+    const { tree } = setup();
+    expect(spacer(tree)).toBeNull();
+  });
+
+  it("keeps the scroll range while scrolling and re-measures when the rows change", () => {
+    const width = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(640);
+    const { tree, key } = setup({ horizontalScroll: true, defaultExpanded: ["src"] });
+    expect(spacer(tree)?.style.width).toBe("640px");
+
+    // The wide row left the rendered window: the same rows, measured narrower.
+    width.mockReturnValue(100);
+    key("ArrowDown");
+    expect(spacer(tree)?.style.width).toBe("640px");
+
+    key("Home");
+    key("ArrowLeft");
+    expect(spacer(tree)?.style.width).toBe("100px");
+    width.mockRestore();
+  });
+});
