@@ -139,15 +139,15 @@ pub(crate) fn command_line_limit() -> usize {
     if cfg!(windows) { WINDOWS_LIMIT } else { UNIX_LIMIT }
 }
 
-/// Slack for the program path, the `-c` options [`command`] adds, and quoting.
+/// Slack for the program path and the `-c` options [`command`] adds.
 const COMMAND_LINE_SLACK: usize = 512;
 
-/// Length the OS counts for `base` (one space per argument) plus [`COMMAND_LINE_SLACK`].
+/// Budget for `base` (two quotes and one separator per argument) plus [`COMMAND_LINE_SLACK`].
 pub(crate) fn base_command_line_len(base: &[&str]) -> usize {
-    base.iter().map(|a| a.len() + 1).sum::<usize>() + COMMAND_LINE_SLACK
+    base.iter().map(|a| a.len() + 3).sum::<usize>() + COMMAND_LINE_SLACK
 }
 
-/// Splits `paths` into runs whose length (`base_len` plus each path and its separator)
+/// Splits `paths` into runs whose length (`base_len` plus each path, two quotes, and a separator)
 /// stays within `limit`. A path that alone exceeds the remaining room still gets a batch
 /// of its own, so every call makes progress; an empty list yields no batches.
 pub(crate) fn batch_paths(base_len: usize, paths: &[String], limit: usize) -> Vec<&[String]> {
@@ -157,7 +157,8 @@ pub(crate) fn batch_paths(base_len: usize, paths: &[String], limit: usize) -> Ve
         let mut len = base_len;
         let mut end = start;
         while end < paths.len() {
-            let next = len + paths[end].len() + 1;
+            // Windows quotes arguments containing spaces or tabs; reserve both quotes on every platform.
+            let next = len + paths[end].len() + 3;
             if next > limit && end > start {
                 break;
             }
@@ -574,14 +575,14 @@ mod command_session_tests {
 
 #[cfg(test)]
 mod batching_tests {
-    use super::{batch_paths, command_line_limit};
+    use super::{WINDOWS_LIMIT, base_command_line_len, batch_paths, command_line_limit};
 
     fn paths(n: usize, len: usize) -> Vec<String> {
         (0..n).map(|i| format!("src/file-{i}.rs").chars().cycle().take(len).collect()).collect()
     }
 
     fn len_of(base_len: usize, batch: &[String]) -> usize {
-        base_len + batch.iter().map(|p| p.len() + 1).sum::<usize>()
+        base_len + batch.iter().map(|p| p.len() + 3).sum::<usize>()
     }
 
     #[test]
@@ -609,6 +610,18 @@ mod batching_tests {
         }
         // The whole list would not have fit one invocation.
         assert!(len_of(base, &all) > limit);
+    }
+
+    #[test]
+    fn paths_with_spaces_fit_the_windows_limit_including_quotes() {
+        let all = vec![format!("directory with spaces/{}.rs", "x".repeat(15)); 5_000];
+        assert_eq!(all[0].len(), 40);
+        let base = base_command_line_len(&["--literal-pathspecs", "add", "-A", "--"]);
+        let batches = batch_paths(base, &all, WINDOWS_LIMIT);
+        assert!(batches.len() > 1);
+        for batch in batches {
+            assert!(len_of(base, batch) <= WINDOWS_LIMIT);
+        }
     }
 
     #[test]
