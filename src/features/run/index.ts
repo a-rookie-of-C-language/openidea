@@ -51,6 +51,7 @@ import {
   CURRENT_FILE,
   currentFileSelected,
   prepareLaunch,
+  rescheduleConsoleFlushes,
   setBeforeLaunchRunner,
   loadConfigs,
   failedTests,
@@ -518,6 +519,12 @@ export function activate(): () => void {
       if (e.key === "languages" || e.key.startsWith("languages.")) scheduleReload();
     }),
   );
+
+  // Hidden tabs pause rAF: move pending console flushes to timeouts (and back on
+  // return) so output keeps draining while a run continues in the background.
+  const onVisibility = () => rescheduleConsoleFlushes();
+  document.addEventListener("visibilitychange", onVisibility);
+  disposers.push(() => document.removeEventListener("visibilitychange", onVisibility));
 
   return () => {
     clearTimeout(reloadTimer);
