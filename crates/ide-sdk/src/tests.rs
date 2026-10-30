@@ -956,3 +956,14 @@ fn node_lists_every_install_on_the_search_path_not_only_the_first() {
     let found = crate::exec::executables_in("node", [tmp.path().join("empty"), user.clone()].into_iter());
     assert_eq!(found, [user.join(exe("node"))]);
 }
+
+#[test]
+fn node_on_the_search_path_keeps_its_version_manager_as_source() {
+    let home = Path::new("/home/me");
+    let source = |p: &str| crate::discover::node_source(Path::new(p), Some(home));
+    assert_eq!(source("/home/me/.nvm/versions/node/v24.0.0/bin/node"), "nvm");
+    assert_eq!(source("/home/me/.volta/tools/image/node/24.0.0/bin/node"), "volta");
+    assert_eq!(source("/home/me/.local/share/fnm/node-versions/v24/installation/bin/node"), "fnm");
+    assert_eq!(source("/home/me/.local/bin/node"), "path");
+    assert_eq!(source("/usr/bin/node"), "system");
+}

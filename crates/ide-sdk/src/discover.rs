@@ -236,10 +236,17 @@ fn subdirs(dir: &Path) -> Vec<PathBuf> {
 
 // ------------------------------------------------------------------ node
 
+/// Node's own version managers, by where they keep installs below the home directory.
+const NODE_MANAGERS: &[(&str, &str)] =
+    &[(".nvm/versions/node", "nvm"), (".volta/tools/image/node", "volta"), (".local/share/fnm/node-versions", "fnm")];
+
 /// Where a Node on the search path comes from: its version manager, "system" for one
 /// of the system's own bin directories, "path" for anything else the user put on `PATH`.
-fn node_source(path: &Path) -> &'static str {
-    version_managers::manager_of(path).unwrap_or_else(|| {
+pub(crate) fn node_source(path: &Path, home: Option<&Path>) -> &'static str {
+    let managed = home.and_then(|home| {
+        NODE_MANAGERS.iter().find(|(dir, _)| path.starts_with(home.join(dir))).map(|(_, manager)| *manager)
+    });
+    managed.or_else(|| version_managers::manager_of(path)).unwrap_or_else(|| {
         if path.parent().is_some_and(ide_core::tool_path::is_system_dir) { "system" } else { "path" }
     })
 }
@@ -254,7 +261,7 @@ fn node() -> Vec<Sdk> {
         if version_managers::is_shim(&p) {
             continue;
         }
-        let source = node_source(&p);
+        let source = node_source(&p, home_dir().as_deref());
         found.push((p, source));
     }
     if let Some(home) = home_dir() {
