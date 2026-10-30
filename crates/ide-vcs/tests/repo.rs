@@ -111,6 +111,17 @@ fn discover_outside_and_inside() {
 }
 
 #[test]
+fn discover_sha256_repository() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("work");
+    std::fs::create_dir(&dir).unwrap();
+    git_in(&dir, &["init", "-q", "--object-format=sha256"]);
+    let repo = Repo::discover(&dir).unwrap().unwrap();
+    assert_eq!(std::fs::canonicalize(repo.root()).unwrap(), std::fs::canonicalize(&dir).unwrap());
+    assert!(repo.status().unwrap().is_empty());
+}
+
+#[test]
 fn repository_without_commits() {
     let fx = Fixture::new();
     fx.write("new.txt", "hello\n");
