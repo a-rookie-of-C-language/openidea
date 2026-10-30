@@ -7,6 +7,7 @@
  * macOS renders its own overlay title bar but still provides resize
  * handles, so nothing is added there.
  */
+import { useEffect, useState } from "react";
 import { usePlatform } from "@/platform/platformInfo";
 import { isTauri } from "@/platform/ipc";
 import styles from "./WindowResizeHandles.module.css";
@@ -33,7 +34,27 @@ export function WindowResizeHandles() {
   // A frameless window needs them; a decorated one already has native borders.
   const frameless = usePlatform((s) => s.framelessTitleBar);
   const enabled = isTauri() && frameless;
-  if (!enabled) return null;
+  // A maximized or full-screen window has nothing to resize; the edges belong to the content.
+  const [sized, setSized] = useState(false);
+  useEffect(() => {
+    if (!enabled) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/window").then(async ({ getCurrentWindow }) => {
+      const w = getCurrentWindow();
+      const sync = () =>
+        void Promise.all([w.isMaximized(), w.isFullscreen()]).then(([m, f]) => !disposed && setSized(m || f));
+      sync();
+      const off = await w.onResized(sync);
+      if (disposed) off();
+      else unlisten = off;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [enabled]);
+  if (!enabled || sized) return null;
   return (
     <>
       {EDGES.map(({ dir, cls }) => (
