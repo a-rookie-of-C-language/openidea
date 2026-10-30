@@ -328,11 +328,13 @@ function DialogInner({
     const minW = typeof width === "number" ? width : 320;
     const chrome = el.querySelector<HTMLElement>("[data-dialog-titlebar]")?.offsetHeight ?? 0;
     const minH = chrome + 120;
+    const origin = offset;
     const move = (ev: globalThis.PointerEvent) => {
-      setSize({
-        w: Math.min(Math.max(rect.width + ev.clientX - start.x, minW), window.innerWidth - 24),
-        h: Math.min(Math.max(rect.height + ev.clientY - start.y, minH), window.innerHeight - 24),
-      });
+      const w = Math.min(Math.max(rect.width + ev.clientX - start.x, minW), window.innerWidth - 24);
+      const h = Math.min(Math.max(rect.height + ev.clientY - start.y, minH), window.innerHeight - 24);
+      setSize({ w, h });
+      // The overlay centres the dialog: shift by half the growth so its top-left stays put.
+      setOffset({ x: origin.x + (w - rect.width) / 2, y: origin.y + (h - rect.height) / 2 });
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
