@@ -276,7 +276,7 @@ pub fn user_path() -> Option<OsString> {
             if status != ERROR_SUCCESS || len == 0 {
                 return None;
             }
-            let mut buf = vec![0u16; (len as usize + 1) / 2];
+            let mut buf = vec![0u16; (len as usize).div_ceil(2)];
             let status = RegGetValueW(
                 key,
                 std::ptr::null(),
