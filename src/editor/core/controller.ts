@@ -31,6 +31,8 @@ import {
 import { useDistractionFree } from "@/workbench/distractionFree";
 import { ask } from "@/workbench/messages";
 import { t } from "@/platform/i18n";
+import { call, commands } from "@/platform/ipc";
+import { isRemoteWindow } from "@/platform/remote";
 import { fileIconName, showContextMenu, type MenuItem } from "@/ui";
 import { usePlatform } from "@/platform/platformInfo";
 import {
@@ -1294,6 +1296,35 @@ export class EditorController implements SlotHost {
   changeSplitOrientation(paneId: string) {
     this.apply((s) => changeSplitOrientation(s, paneId));
   }
+  /**
+   * IDEA "drag a tab out": the file opens in a forced new window and the tab
+   * here closes. Only the detach moves: the dirty guard stays with the normal
+   * close below, so unsaved changes still ask Save / Don't Save / Cancel.
+   * Resolves true when the tab closed, false when refused or cancelled.
+   */
+  async detachTab(paneId: string, tabId: string): Promise<boolean> {
+    const tab = useTabs.getState().panes[paneId]?.tabs.find((t) => t.id === tabId);
+    const path = tab?.input.kind === "file" ? tab.input.path : undefined;
+    if (!tab || !path) return false;
+    if (isRemoteWindow()) {
+      notifications().notify({ level: "warning", title: t("app.window.desktopOnly") });
+      return false;
+    }
+    const project = useProject.getState().project;
+    const inProject = !!project && (path === project.root || path.startsWith(`${project.root}/`));
+    try {
+      await call(commands.windowOpenFileInNewWindow(inProject ? project.root : null, path));
+    } catch (e) {
+      notifications().notify({
+        level: "error",
+        title: t("app.window.openFailed", { name: basename(path) }),
+        body: e instanceof Error ? e.message : String(e),
+        key: `app.open:${path}`,
+      });
+      return false;
+    }
+    return this.closeTab(paneId, tabId);
+  }
   /** IDEA "Open in Opposite Group": the tab stays and a copy opens next door (or in a new split). */
   openInOpposite(paneId: string, tabId: string) {
     const s = useTabs.getState();
@@ -1593,6 +1624,9 @@ export class EditorController implements SlotHost {
             { label: "Unsplit", run: () => void this.unsplit(paneId) },
             { label: "Unsplit All", run: () => void this.unsplitAll(paneId) },
           ] as MenuItem[])
+        : []),
+      ...(tab.input.kind === "file" && tab.input.path
+        ? ([{ label: "Open in New Window", run: () => void this.detachTab(paneId, tab.id) }] as MenuItem[])
         : []),
       { kind: "separator" },
       ...(path
