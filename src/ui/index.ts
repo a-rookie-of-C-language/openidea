@@ -10,12 +10,10 @@ export {
   FILES_DRAG,
   dragRequiresAlt,
   dragSession,
-  isOutsideWindow,
   registerDropTarget,
   setDragRequiresAlt,
   startPointerDrag,
   type DragSession,
-  type PointerDrop,
 } from "./pointerDrag";
 export * from "./Tree";
 export * from "./List";
