@@ -314,8 +314,8 @@ impl AgentManager {
     }
 
     /// The slash commands to complete for `provider`, in `task`'s directory or (without one)
-    /// in the project: what the agent offered last time there, plus, for Claude Code, the
-    /// skills and custom commands on disk it has not listed.
+    /// in the project: what the agent offered last time there, unadvertised builtins,
+    /// and, for Claude Code, skills and custom commands on disk it has not listed.
     pub async fn commands(&self, provider: &str, task: Option<&str>) -> IdeResult<Vec<AgentCommand>> {
         let (provider, offered, cwd) = match task {
             Some(id) => {
@@ -1641,8 +1641,8 @@ fn model_of(config: &[AgentConfigOption]) -> Option<String> {
 /// its CLI builtins, passed through as prompt text (e.g. `/compact`). `(name, description)`.
 fn builtin_commands(provider: &str) -> &'static [(&'static str, &'static str)] {
     match provider {
-        "claude" | "claude-acp" => &[("compact", "compact the conversation")],
-        "opencode" | "opencode2" => &[("compact", "compact the conversation"), ("loop", "run a prompt on a schedule")],
+        // OpenCode ACP handles `/compact` via session.summarize but omits it from its command list.
+        "opencode" => &[("compact", "compact the conversation")],
         _ => &[],
     }
 }
