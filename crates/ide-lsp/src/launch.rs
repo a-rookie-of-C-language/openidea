@@ -205,9 +205,7 @@ mod tests {
         let p = search_path();
         let dirs: Vec<PathBuf> = std::env::split_paths(&p).collect();
         // The process's own `PATH` starts the search, then per-user and system dirs.
-        let first_env = std::env::split_paths(&std::env::var_os("PATH").unwrap())
-            .find(|d| d.is_absolute())
-            .unwrap();
+        let first_env = std::env::split_paths(&std::env::var_os("PATH").unwrap()).find(|d| d.is_absolute()).unwrap();
         assert_eq!(dirs.first(), Some(&first_env), "{dirs:?}");
     }
 }

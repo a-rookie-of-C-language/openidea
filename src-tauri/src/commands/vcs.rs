@@ -52,8 +52,13 @@ pub async fn vcs_file_at(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn vcs_blame(window: Window, state: State<'_, AppState>, path: PathBuf) -> IdeResult<Vec<BlameLine>> {
-    ide_host::ops::vcs::vcs_blame(&state.host, window.label(), path).await
+pub async fn vcs_blame(
+    window: Window,
+    state: State<'_, AppState>,
+    path: PathBuf,
+    text: Option<String>,
+) -> IdeResult<Vec<BlameLine>> {
+    ide_host::ops::vcs::vcs_blame(&state.host, window.label(), path, text).await
 }
 
 #[tauri::command]
