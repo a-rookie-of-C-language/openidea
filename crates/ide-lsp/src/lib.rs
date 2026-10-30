@@ -577,6 +577,7 @@ impl LspManager {
         };
         self.clear_server_state(&server);
         if intentional {
+            server.announce_down();
             return;
         }
         let tail = server.stderr_tail(5);
