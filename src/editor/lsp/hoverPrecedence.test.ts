@@ -5,7 +5,9 @@ import { EditorView, activateHover, hasHoverTooltips } from "@codemirror/view";
 import { CONTRIBUTED_HOVER, type ContributedHover } from "@/editor/api";
 import { usePlatform } from "@/platform/platformInfo";
 import {
+  isImplementationGesture,
   isNavigationGesture,
+  isNavigationModifier,
   navigationModifierHeld,
   pointerTarget,
   resetNavigationModifier,
@@ -60,6 +62,31 @@ describe.each([
     const both = new MouseEvent("mousemove", { [flag]: true, [other]: true });
     expect(isNavigationGesture(both)).toBe(false);
     expect(isNavigationGesture(new MouseEvent("mousemove", { [flag]: true }))).toBe(true);
+  });
+
+  it("⌘⌥ / Ctrl+Alt is the implementation gesture and counts as a navigation modifier", () => {
+    const alt = new MouseEvent("mousemove", { [flag]: true, altKey: true });
+    // Issue #365: ⌘⌥ hover shows the underline too; a click goes to the implementation.
+    expect(isNavigationModifier(alt)).toBe(true);
+    expect(isImplementationGesture(alt)).toBe(true);
+    expect(navigationModifierHeld()).toBe(false);
+    key("keydown", mod, { [flag]: true, altKey: true });
+    expect(navigationModifierHeld()).toBe(true);
+    key("keyup", mod);
+    expect(navigationModifierHeld()).toBe(false);
+    // With ⇧ it is another gesture (⌘⌥⇧), and the other platform's Ctrl/⌘ is not it.
+    expect(isNavigationModifier(new MouseEvent("mousemove", { [flag]: true, altKey: true, shiftKey: true }))).toBe(
+      false,
+    );
+    expect(isImplementationGesture(new MouseEvent("mousemove", { [flag]: true, altKey: true, shiftKey: true }))).toBe(
+      false,
+    );
+    const both = new MouseEvent("mousemove", { [flag]: true, altKey: true, [other]: true });
+    expect(isNavigationModifier(both)).toBe(false);
+    expect(isImplementationGesture(both)).toBe(false);
+    // Plain-modifier-only predicate stays false for ⌘⌥.
+    expect(isNavigationGesture(alt)).toBe(false);
+    expect(isNavigationGesture(new MouseEvent("mousemove", { altKey: true }))).toBe(false);
   });
 
   it("learns the state from mouse moves and forgets it when the window loses focus", () => {

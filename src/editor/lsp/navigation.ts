@@ -1,8 +1,9 @@
 /**
- * Go to declaration / implementation / type declaration (⌘B, ⌥⌘B, ⇧⌘B and
- * ⌘-click with a link underline while ⌘ is held), the multiple-targets
- * chooser, and document highlights (occurrences of the symbol at the caret,
- * plus the sticky find.highlightUsages variant).
+ * Go to declaration / implementation / type declaration (⌘B, ⌥⌘B, ⇧⌘B, and
+ * ⌘-click with a link underline while ⌘ is held; ⌘⌥-click goes to the
+ * implementation), the multiple-targets chooser, and document highlights
+ * (occurrences of the symbol at the caret, plus the sticky
+ * find.highlightUsages variant).
  */
 import { EditorSelection, Prec, StateEffect, StateField, type Extension, type Text } from "@codemirror/state";
 import {
@@ -56,7 +57,7 @@ import { declarationSummary, renderCode } from "./markdown";
 import { editorPrefs } from "@/platform/editorSettings";
 import { isVirtualUri, virtualContainer } from "@/platform/virtualDocs";
 import { shortcutLabel } from "@/platform/keymap";
-import { isNavigationGesture, onNavigationModifier } from "@/platform/navigationModifier";
+import { isImplementationGesture, isNavigationModifier, onNavigationModifier } from "@/platform/navigationModifier";
 import { create } from "zustand";
 import { tx } from "@/platform/i18n";
 
@@ -482,20 +483,21 @@ const linkPlugin = ViewPlugin.fromClass(
         // Not through a popup or an inlay hint (which navigates on its own ⌘-click) to the text under it.
         const over = e.target instanceof Element ? e.target : null;
         this.last = over?.closest(".cm-tooltip, .cm-lsp-inlay") ? null : { x: e.clientX, y: e.clientY };
-        this.show(isNavigationGesture(e));
+        this.show(isNavigationModifier(e));
       },
       mouseleave() {
         this.last = null;
         this.show(false);
       },
       mousedown(e, view) {
-        if (e.button !== 0 || !isNavigationGesture(e)) return false;
+        if (e.button !== 0 || !isNavigationModifier(e)) return false;
         const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
         if (pos == null) return false;
         e.preventDefault();
         view.dispatch({ selection: EditorSelection.cursor(pos), effects: setLink.of(null) });
         view.focus();
-        void gotoTargets(view, "definition", pos);
+        // ⌘⌥-click goes to the implementation, the mouse form of ⌘⌥B; ⌘-click to the declaration.
+        void gotoTargets(view, isImplementationGesture(e) ? "implementation" : "definition", pos);
         return true;
       },
     },

@@ -1,8 +1,9 @@
 /**
  * The navigation modifier (⌘ on macOS, Ctrl elsewhere) as a live, window-wide
- * state: ⌘/Ctrl-hover shows the navigation link and its brief info, and every
+ * state: ⌘/Ctrl-hover shows the navigation link and its brief info, ⌘⌥/Ctrl+Alt
+ * hover shows it too (and goes to the implementation on click), and every
  * plain hover popup (quick documentation, problems, debugger values) yields to
- * it. Tracked on the window so an editor sees the key even when it isn't focused.
+ * both. Tracked on the window so an editor sees the key even when it isn't focused.
  */
 import { hasPrimaryModifier, isMacHost } from "./keymap";
 
@@ -11,6 +12,16 @@ type ModifierEvent = Pick<MouseEvent, "metaKey" | "ctrlKey" | "altKey" | "shiftK
 /** ⌘/Ctrl alone: no ⌥/⇧ (other gestures) and not the other platform's Ctrl/⌘. */
 export function isNavigationGesture(e: ModifierEvent): boolean {
   return hasPrimaryModifier(e) && !e.altKey && !e.shiftKey && !(isMacHost() ? e.ctrlKey : e.metaKey);
+}
+
+/** ⌘⌥ / Ctrl+Alt: go to implementation, the mouse form of ⌘⌥B (no ⇧, not the other platform's Ctrl/⌘). */
+export function isImplementationGesture(e: ModifierEvent): boolean {
+  return hasPrimaryModifier(e) && e.altKey && !e.shiftKey && !(isMacHost() ? e.ctrlKey : e.metaKey);
+}
+
+/** Either gesture: the link underline and the hover popups' yield follow both. */
+export function isNavigationModifier(e: ModifierEvent): boolean {
+  return isNavigationGesture(e) || isImplementationGesture(e);
 }
 
 let held = false;
@@ -26,11 +37,11 @@ function setHeld(value: boolean) {
 
 function install() {
   if (installed || typeof window === "undefined") return;
-  const onKey = (e: KeyboardEvent) => setHeld(isNavigationGesture(e));
+  const onKey = (e: KeyboardEvent) => setHeld(isNavigationModifier(e));
   // Also from pointer events: a key released outside the window never reports its keyup.
   const onMouse = (e: MouseEvent) => {
     pointer = e.target instanceof Element ? e.target : null;
-    setHeld(isNavigationGesture(e));
+    setHeld(isNavigationModifier(e));
   };
   const onBlur = () => setHeld(false);
   const opts = { capture: true, passive: true } as const;
