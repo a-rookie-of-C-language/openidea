@@ -6,6 +6,7 @@
 import { RangeSetBuilder, type EditorState, type Extension } from "@codemirror/state";
 import { Decoration, ViewPlugin, type DecorationSet, type EditorView, type ViewUpdate } from "@codemirror/view";
 import { getIndentUnit } from "@codemirror/language";
+import { isScrollSettled } from "./scrollThrottle";
 
 const cache = new Map<string, Decoration>();
 function guideDeco(levels: number, step: number) {
@@ -76,8 +77,14 @@ export const indentGuides: Extension = ViewPlugin.fromClass(
       this.decorations = build(view);
     }
     update(u: ViewUpdate) {
-      if (u.docChanged || u.viewportChanged || u.startState.tabSize !== u.state.tabSize)
+      if (u.docChanged || u.startState.tabSize !== u.state.tabSize || isScrollSettled(u)) {
         this.decorations = build(u.view);
+        return;
+      }
+      // During active scrolling the .cm-scrolling class hides the guide
+      // decoration anyway — skip the rebuild and re-run once scrolling
+      // settles (the trailing requestMeasure repaints with fresh ranges).
+      if (u.viewportChanged && !u.view.dom.classList.contains("cm-scrolling")) this.decorations = build(u.view);
     }
   },
   { decorations: (v) => v.decorations },

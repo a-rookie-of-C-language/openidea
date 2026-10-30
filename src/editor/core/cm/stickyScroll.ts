@@ -10,6 +10,7 @@ import { foldNodeProp, syntaxTree } from "@codemirror/language";
 import { highlightTree } from "@lezer/highlight";
 import { backendFolds } from "./folding";
 import { openideaHighlightStyle } from "./highlight";
+import { isScrollSettled } from "./scrollThrottle";
 
 /** Maximum number of sticky lines (Settings › Editor › Code Editing). */
 export const stickyMaxLines = Facet.define<number, number>({
@@ -120,15 +121,24 @@ class StickyScroll {
   update(u: ViewUpdate) {
     if (
       u.docChanged ||
-      u.viewportChanged ||
       u.geometryChanged ||
       syntaxTree(u.startState) !== syntaxTree(u.state) ||
-      u.startState.field(backendFolds, false) !== u.state.field(backendFolds, false)
+      u.startState.field(backendFolds, false) !== u.state.field(backendFolds, false) ||
+      isScrollSettled(u)
     )
       this.schedule();
+    // Viewport moves during a scroll burst are wasteful: the .cm-scrolling
+    // class already hides the bar, so recompute once when scrolling stops.
+    if (u.viewportChanged && !u.view.dom.classList.contains("cm-scrolling")) this.schedule();
   }
 
-  private onScroll = () => this.schedule();
+  private onScroll = () => {
+    // The class is set by the scrollThrottle plugin on the same element;
+    // while it is up the bar is hidden anyway — re-measure on the trailing
+    // requestMeasure after scrolling settles.
+    if (this.view.dom.classList.contains("cm-scrolling")) return;
+    this.schedule();
+  };
 
   private schedule() {
     if (this.scheduled) return;

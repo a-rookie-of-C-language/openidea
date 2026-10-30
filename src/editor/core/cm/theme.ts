@@ -319,6 +319,12 @@ export const openideaTheme = EditorView.theme({
   },
   ".cm-openidea-stickyText": { flex: "1", overflow: "hidden" },
 
+  // While the wheel is moving, hide the decorations that cost the most
+  // per-frame work (sticky header and indent guides repaint every row).
+  // They reappear the moment scrolling settles (see scrollThrottle.ts).
+  "&.cm-scrolling .cm-openidea-sticky": { display: "none" },
+  "&.cm-scrolling .cm-openidea-guides": { backgroundImage: "none" },
+
   // Soft-wrap: continuation rows indent slightly, like IDEA's wrap sign column.
   "&.cm-lineWrapping .cm-line, .cm-lineWrapping .cm-line": { paddingRight: "24px" },
 });
