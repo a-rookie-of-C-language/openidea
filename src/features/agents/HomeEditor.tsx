@@ -59,7 +59,7 @@ export function HomeEditor() {
     if (!canStart) return;
     setStarting(true);
     setError(null);
-    startTask()
+    startTask(isolation)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setStarting(false));
   };
