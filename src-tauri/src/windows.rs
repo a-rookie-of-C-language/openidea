@@ -703,12 +703,13 @@ pub fn open_settings_window(
         config.background_color = Some(color);
     }
     windows.set_launch(&label, Launch { settings_page: page, new_projects, ..Default::default() });
-    let builder = WebviewWindowBuilder::from_config(app, &config);
-    // AppKit child windows can disappear when dragged to another display's Space.
-    // The settings label already tracks ownership and parent-close cleanup.
-    #[cfg(not(target_os = "macos"))]
-    let builder = builder.and_then(|b| b.parent(&parent));
-    let window = builder
+    // Top-level on every platform. A Win32 child (`.parent()`) is positioned in its parent's
+    // client-area coordinates, but we move/size with screen coordinates, so on a secondary
+    // monitor whose origin isn't (0,0) it rendered outside the client area and looked like
+    // "Settings does nothing". On macOS an AppKit child window can disappear when dragged to
+    // another display's Space. The settings label already tracks ownership and parent-close
+    // cleanup, and modality is enforced by `settings_parent` in the menu handler.
+    let window = WebviewWindowBuilder::from_config(app, &config)
         .and_then(|b| b.build())
         .map_err(|e| IdeError::internal(format!("cannot create settings window: {e}")))?;
     apply_zoom(app, &window);
