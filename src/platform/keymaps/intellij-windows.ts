@@ -20,7 +20,7 @@ export const intellijWindows: Record<string, string[]> = {
   "navigate.forward": ["Ctrl+Alt+Right", "Button5"],
   "navigate.gotoLine": ["Ctrl+G"],
   "navigate.declaration": ["Ctrl+B"],
-  "navigate.implementation": ["Ctrl+Alt+B"],
+  "navigate.implementation": ["Ctrl+Alt+B", "Ctrl+Alt+Button1"],
   "navigate.typeDeclaration": ["Ctrl+Shift+B"],
   "navigate.fileStructure": ["Ctrl+F12"],
   "navigate.nextError": ["F2"],
