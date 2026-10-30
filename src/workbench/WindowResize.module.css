@@ -1,0 +1,70 @@
+/* Resize grips for the frameless Windows window: 4px edge strips and 8px corners. */
+.zones {
+  position: fixed;
+  inset: 0;
+  /* Above the shell's own chrome, below dialogs and popups, so those are never blocked. */
+  z-index: calc(var(--z-dialog) - 1);
+  pointer-events: none;
+}
+
+.zones > div {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.north,
+.south {
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
+}
+.north {
+  top: 0;
+}
+.south {
+  bottom: 0;
+}
+
+.west,
+.east {
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+}
+.west {
+  left: 0;
+}
+.east {
+  right: 0;
+}
+
+/* Corners sit over the ends of the strips so the diagonal cursor wins there. */
+.northWest,
+.northEast,
+.southWest,
+.southEast {
+  width: 8px;
+  height: 8px;
+}
+.northWest {
+  top: 0;
+  left: 0;
+  cursor: nw-resize;
+}
+.northEast {
+  top: 0;
+  right: 0;
+  cursor: ne-resize;
+}
+.southWest {
+  bottom: 0;
+  left: 0;
+  cursor: sw-resize;
+}
+.southEast {
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+}

@@ -7,12 +7,7 @@ import clsx from "clsx";
 import { t } from "@/platform/i18n";
 import { Icon } from "@/ui";
 import styles from "./TitleBar.module.css";
-
-type AppWindow = import("@tauri-apps/api/window").Window;
-
-function withWindow(run: (w: AppWindow) => unknown) {
-  void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => run(getCurrentWindow()));
-}
+import { withWindow } from "./windowApi";
 
 function CloseButton() {
   return (
