@@ -201,7 +201,7 @@ fn concurrent_installs_of_one_tool_are_rejected() {
 /// duplicate install) and shares the result instead of `AlreadyExists`.
 #[test]
 fn second_install_joins_the_running_one() {
-    let slot = match install_slot("sqls") {
+    let slot = match install_slot("sqls", &CancellationToken::new()) {
         Ok(slot) => slot,
         Err(_) => panic!("no install is running"),
     };
@@ -232,7 +232,7 @@ fn second_install_joins_the_running_one() {
     assert!(texts.contains(&"Joined the install already in progress…".to_string()), "{texts:?}");
     assert!(texts.iter().any(|l| l == "line 2"), "{texts:?}");
     // The slot is released: a fresh install can start.
-    match install_slot("sqls") {
+    match install_slot("sqls", &CancellationToken::new()) {
         Ok(fresh) => release_install_slot("sqls", &fresh),
         Err(_) => panic!("the finished install still holds its slot"),
     }
@@ -241,7 +241,7 @@ fn second_install_joins_the_running_one() {
 /// A late caller gets the finished result without waiting.
 #[test]
 fn install_joined_after_it_finished_returns_the_result() {
-    let slot = match install_slot("marksman") {
+    let slot = match install_slot("marksman", &CancellationToken::new()) {
         Ok(slot) => slot,
         Err(_) => panic!("no install is running"),
     };
@@ -539,4 +539,16 @@ fn kotlin_debugger_uses_existing_release_recipe_and_language_definition() {
         Method::Release { source: ReleaseSource::GitHub { repo: "fwcd/kotlin-debug-adapter" }, .. }
     ));
     assert!(langs().iter().any(|l| l.debugger.as_ref().is_some_and(|d| d.adapter == spec.name)));
+}
+
+#[test]
+fn the_installing_request_can_still_cancel_its_shared_install() {
+    let owner = CancellationToken::new();
+    let slot = match install_slot("taplo", &owner) {
+        Ok(slot) => slot,
+        Err(_) => panic!("slot already taken"),
+    };
+    owner.cancel();
+    assert!(slot.cancel.is_cancelled());
+    release_install_slot("taplo", &slot);
 }

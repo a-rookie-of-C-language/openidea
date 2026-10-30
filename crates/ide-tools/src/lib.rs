@@ -226,14 +226,15 @@ impl Drop for InstallGuard {
 
 /// Marks `name` as installing (the slot is removed when the owner finishes) or
 /// returns the existing slot to join.
-fn install_slot(name: &str) -> Result<Arc<InstallSlot>, Arc<InstallSlot>> {
+fn install_slot(name: &str, cancel: &CancellationToken) -> Result<Arc<InstallSlot>, Arc<InstallSlot>> {
     let mut map = INSTALLING.lock();
     let map = map.get_or_insert_with(HashMap::new);
     match map.get(name) {
         Some(slot) => Err(slot.clone()),
         None => {
             let slot = Arc::new(InstallSlot {
-                cancel: CancellationToken::new(),
+                // The owner's token: its own Cancel and a joined caller's both stop the run.
+                cancel: cancel.clone(),
                 listeners: Mutex::new(Vec::new()),
                 result: std::sync::OnceLock::new(),
             });
@@ -754,7 +755,7 @@ impl Tools {
         if let Some(reason) = self.unavailable_reason(spec) {
             return Err(IdeError::unavailable(reason));
         }
-        let slot = match install_slot(name) {
+        let slot = match install_slot(name, cancel) {
             Ok(slot) => slot,
             Err(slot) => return join_install(&slot, cancel, emit),
         };
