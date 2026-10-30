@@ -547,6 +547,10 @@ impl AgentManager {
                 o.current = Some(value);
             }
             s.task.model = model_of(&s.task.config).or(s.task.model.take());
+            let provider = s.task.provider.clone();
+            let config = s.task.config.clone();
+            drop(s);
+            task.shared.remember(&provider, Some(&config), None);
         }
         task.approve_pending();
         task.persist();
@@ -753,6 +757,26 @@ impl AgentManager {
         let task = self.task(id)?;
         task.kill();
         task.set_status(AgentStatus::Archived, None);
+        Ok(())
+    }
+
+    /// Returns an archived task to the active list without starting the agent.
+    pub fn unarchive(&self, id: &str) -> IdeResult<()> {
+        let task = self.task(id)?;
+        {
+            let mut s = task.state.lock();
+            if s.task.status != AgentStatus::Archived {
+                return Ok(());
+            }
+            if s.busy {
+                return Err(IdeError::invalid("the task is still stopping"));
+            }
+            s.task.status = AgentStatus::Ready;
+            s.task.error = None;
+            s.task.updated_ms = now_ms();
+        }
+        task.persist();
+        task.emit_task();
         Ok(())
     }
 
@@ -1191,7 +1215,6 @@ impl Task {
             (if known { reported } else { s.task.config.clone() }, s.wanted.clone())
         };
         config::add_client_options(&provider_id, &mut options);
-        self.shared.remember(&provider_id, Some(&options), None);
         for choice in &wanted {
             // An option the session doesn't offer yet is set once it does (`apply_late_choices`).
             let Some(o) = options.iter().find(|o| o.id == choice.id).cloned() else { continue };
@@ -1220,6 +1243,7 @@ impl Task {
                 Err(e) => tracing::warn!("agent task {}: setting {} to {} failed: {e}", self.id, o.id, choice.value),
             }
         }
+        self.shared.remember(&provider_id, Some(&options), None);
         {
             let mut s = self.state.lock();
             s.task.model = model_of(&options).or(s.task.model.take());
