@@ -11,6 +11,7 @@ import {
   useEffect,
   useId,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -18,6 +19,7 @@ import {
   type MouseEvent,
   type ReactNode,
   type Ref,
+  type RefObject,
 } from "react";
 import clsx from "clsx";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -109,8 +111,27 @@ export interface TreeProps<T> {
   "aria-label"?: string;
   handleRef?: Ref<TreeHandle>;
   empty?: ReactNode;
+  /** Rows wider than the pane scroll horizontally instead of clipping. */
+  horizontalScroll?: boolean;
   /** Optional display reordering between siblings; the caller owns the order. */
   reorder?: TreeReorder<T>;
+}
+
+/** Widest row seen since `rows` last changed; rows are virtualised, so the scroll range must outlive them. */
+function useContentWidth(scroller: RefObject<HTMLDivElement | null>, rows: unknown, enabled: boolean): number {
+  const [width, setWidth] = useState(0);
+  const measuredRows = useRef(rows);
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    let widest = 0;
+    scroller.current?.querySelectorAll<HTMLElement>("[data-row]").forEach((row) => {
+      widest = Math.max(widest, row.offsetWidth);
+    });
+    const kept = measuredRows.current === rows;
+    measuredRows.current = rows;
+    setWidth((current) => (kept ? Math.max(current, widest) : widest));
+  });
+  return width;
 }
 
 interface Row<T> {
@@ -216,6 +237,7 @@ export function Tree<T>(props: TreeProps<T>) {
 
   const byKey = useMemo(() => new Map(allRows.map((r) => [r.key, r])), [allRows]);
   const emptyState = !rows.length && !!empty && !query;
+  const contentWidth = useContentWidth(scrollRef, rows, !!props.horizontalScroll);
   const reordering = useTreeReorder(scrollRef, rows, emptyState ? undefined : props.reorder);
   // aria-posinset / aria-setsize among visible siblings (rows are virtualised).
   const positions = useMemo(() => siblingPositions(rows), [rows]);
@@ -503,6 +525,9 @@ export function Tree<T>(props: TreeProps<T>) {
         }
       >
         <div className={styles.sizer} style={{ height: virtualizer.getTotalSize() }}>
+          {props.horizontalScroll && (
+            <div aria-hidden data-content-width className={styles.contentWidth} style={{ width: contentWidth }} />
+          )}
           {virtualizer.getVirtualItems().map((v) => {
             const row = rows[v.index]!;
             const pad = 4 + row.depth * indent;
@@ -546,6 +571,7 @@ export function Tree<T>(props: TreeProps<T>) {
                 aria-selected={isSelected}
                 className={clsx(
                   styles.row,
+                  props.horizontalScroll && styles.wideRow,
                   rowClassName?.(row.node),
                   isSelected && styles.selected,
                   isLead && styles.lead,
