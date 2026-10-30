@@ -25,6 +25,7 @@ import {
 import { EnvDialog } from "./EnvDialog";
 import { withTarget } from "./remote";
 import { COMPOUND, formParams, terminalApplies, withParams } from "./types";
+import { TomcatSettings } from "./TomcatSettings";
 import styles from "./Run.module.css";
 
 /**
@@ -331,7 +332,7 @@ export function ConfigForm({ config, all, type, errors, template, onChange, modi
         </Field>
       )}
       <div className={styles.formSection}>
-        <span className={styles.formSectionTitle}>{tx(type?.label ?? kindLabel(config.kind))}</span>
+        <span className={styles.formSectionTitle}>{tx(kindLabel(config.kind))}</span>
         <button
           ref={modifyRef}
           type="button"
@@ -351,6 +352,8 @@ export function ConfigForm({ config, all, type, errors, template, onChange, modi
           onClose={() => setModifyOpen(false)}
         />
       </div>
+
+      {config.kind === "tomcat" && <TomcatSettings config={config} onChange={onChange} />}
 
       {compound ? (
         template ? null : (
