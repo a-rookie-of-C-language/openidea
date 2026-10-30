@@ -236,7 +236,7 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(5));
         };
-        server.answer(id, Some("hunter2".into()));
+        server.answer(id, Some("hunter2".into()), false);
         assert_eq!(client.join().unwrap().as_deref(), Some("hunter2"));
         assert!(server.env().iter().any(|(k, v)| k == "SSH_ASKPASS" && v == "helper"));
     }
