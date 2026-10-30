@@ -24,9 +24,21 @@ use std::sync::Arc;
 /// A path, or a name not found on `PATH`, is used as it is; a single match returns its
 /// resolved path so Windows `PATHEXT` shims (`claude.cmd`, `codex.cmd`) start.
 pub(crate) fn newest_install(command: &str) -> String {
-    let path = ide_core::process::host_var_os("PATH")
+    let base = ide_core::process::host_var_os("PATH")
         .or_else(|| ide_core::process::shell_env().find(|(k, _)| *k == "PATH").map(|(_, v)| v.to_owned()))
         .unwrap_or_default();
+    // Windows: a process started before the user `PATH` was set lacks its entries, so a tool
+    // installed for the user (npm, `dotnet tool install -g`, a vendor installer) is "not found".
+    let mut path = base;
+    if let Some(user) = ide_core::process::user_path() {
+        let mut dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
+        for dir in std::env::split_paths(&user) {
+            if !dirs.contains(&dir) {
+                dirs.push(dir);
+            }
+        }
+        path = std::env::join_paths(dirs).unwrap_or(path);
+    }
     newest_install_in(command, &path)
 }
 
