@@ -128,6 +128,78 @@ pub fn git_version(executable: Option<&Path>) -> IdeResult<String> {
     Ok(text)
 }
 
+/// `CreateProcessW` takes at most 32767 chars including the NUL; leave slack for quoting.
+/// (The same limits as `ide_run::java_cmdline`'s shortened java command lines.)
+pub(crate) const WINDOWS_LIMIT: usize = 32_000;
+/// Linux caps one argument at 128 KiB (`MAX_ARG_STRLEN`); macOS the whole `ARG_MAX` (1 MiB, env included).
+pub(crate) const UNIX_LIMIT: usize = 120_000;
+
+/// The longest command line this platform's process spawning accepts.
+pub(crate) fn command_line_limit() -> usize {
+    if cfg!(windows) { WINDOWS_LIMIT } else { UNIX_LIMIT }
+}
+
+/// Slack for the program path and the `-c` options [`command`] adds.
+const COMMAND_LINE_SLACK: usize = 512;
+
+/// Budget for `base` (two quotes and one separator per argument) plus [`COMMAND_LINE_SLACK`].
+pub(crate) fn base_command_line_len(base: &[&str]) -> usize {
+    base.iter().map(|a| a.len() + 3).sum::<usize>() + COMMAND_LINE_SLACK
+}
+
+/// Splits `paths` into runs whose length (`base_len` plus each path, two quotes, and a separator)
+/// stays within `limit`. A path that alone exceeds the remaining room still gets a batch
+/// of its own, so every call makes progress; an empty list yields no batches.
+pub(crate) fn batch_paths(base_len: usize, paths: &[String], limit: usize) -> Vec<&[String]> {
+    let mut batches = Vec::new();
+    let mut start = 0;
+    while start < paths.len() {
+        let mut len = base_len;
+        let mut end = start;
+        while end < paths.len() {
+            // Windows quotes arguments containing spaces or tabs; reserve both quotes on every platform.
+            let next = len + paths[end].len() + 3;
+            if next > limit && end > start {
+                break;
+            }
+            len = next;
+            end += 1;
+        }
+        batches.push(&paths[start..end]);
+        start = end;
+    }
+    batches
+}
+
+/// [`run`] with a list of paths appended after `--`, split into as many invocations as
+/// the platform's command-line limit needs (a large rollback would otherwise fail with
+/// `os error 206` on Windows). `args` must already carry `--literal-pathspecs` and
+/// end with `--`; the first error stops the remaining batches.
+pub(crate) fn run_paths_env(
+    root: &Path,
+    args: &[&str],
+    paths: &[String],
+    stdin: Option<&[u8]>,
+    env: &[(&str, &std::ffi::OsStr)],
+) -> IdeResult<Output> {
+    let mut out = Output { stdout: Vec::new(), stderr: Vec::new(), code: Some(0) };
+    if paths.is_empty() {
+        return Ok(out);
+    }
+    let base_len = base_command_line_len(args);
+    for batch in batch_paths(base_len, paths, command_line_limit()) {
+        let mut full: Vec<&str> = args.to_vec();
+        full.extend(batch.iter().map(String::as_str));
+        out = run_env(root, &full, stdin, env)?;
+    }
+    Ok(out)
+}
+
+/// [`run_paths_env`] without extra environment variables.
+pub(crate) fn run_paths(root: &Path, args: &[&str], paths: &[String]) -> IdeResult<Output> {
+    run_paths_env(root, args, paths, None, &[])
+}
+
 /// Builds a `git` command with the environment every invocation needs.
 pub(crate) fn command(root: &Path) -> IdeResult<Command> {
     let mut cmd = Command::new(git_binary()?);
@@ -498,5 +570,72 @@ mod command_session_tests {
         let events = events.lock().unwrap();
         let ours: Vec<_> = events.iter().filter(|(id, _, _)| *id == first_id || *id == second_id).cloned().collect();
         assert_eq!(ours, vec![(second_id, false, String::new()), (first_id, true, "done".into())]);
+    }
+}
+
+#[cfg(test)]
+mod batching_tests {
+    use super::{WINDOWS_LIMIT, base_command_line_len, batch_paths, command_line_limit};
+
+    fn paths(n: usize, len: usize) -> Vec<String> {
+        (0..n).map(|i| format!("src/file-{i}.rs").chars().cycle().take(len).collect()).collect()
+    }
+
+    fn len_of(base_len: usize, batch: &[String]) -> usize {
+        base_len + batch.iter().map(|p| p.len() + 3).sum::<usize>()
+    }
+
+    #[test]
+    fn empty_input_yields_no_batches() {
+        let empty: Vec<String> = Vec::new();
+        assert!(batch_paths(10, &empty, 100).is_empty());
+    }
+
+    #[test]
+    fn every_path_is_batched_exactly_once_and_in_order() {
+        let all = paths(100, 12);
+        let batches = batch_paths(50, &all, 200);
+        let joined: Vec<&String> = batches.iter().flat_map(|b| b.iter()).collect();
+        assert_eq!(joined, all.iter().collect::<Vec<_>>());
+        assert!(batches.len() > 1);
+    }
+
+    #[test]
+    fn batches_stay_within_the_limit() {
+        let all = paths(5_000, 40);
+        let base = 40;
+        let limit = 1_000;
+        for batch in batch_paths(base, &all, limit) {
+            assert!(len_of(base, batch) <= limit || batch.len() == 1);
+        }
+        // The whole list would not have fit one invocation.
+        assert!(len_of(base, &all) > limit);
+    }
+
+    #[test]
+    fn paths_with_spaces_fit_the_windows_limit_including_quotes() {
+        let all = vec![format!("directory with spaces/{}.rs", "x".repeat(15)); 5_000];
+        assert_eq!(all[0].len(), 40);
+        let base = base_command_line_len(&["--literal-pathspecs", "add", "-A", "--"]);
+        let batches = batch_paths(base, &all, WINDOWS_LIMIT);
+        assert!(batches.len() > 1);
+        for batch in batches {
+            assert!(len_of(base, batch) <= WINDOWS_LIMIT);
+        }
+    }
+
+    #[test]
+    fn an_oversized_path_gets_its_own_batch() {
+        let all = vec!["a".to_string(), "x".repeat(10_000), "b".to_string()];
+        let batches = batch_paths(0, &all, 100);
+        assert_eq!(batches.len(), 3);
+        assert_eq!(batches[0].to_vec(), vec!["a".to_string()]);
+        assert_eq!(batches[1].to_vec(), vec!["x".repeat(10_000)]);
+        assert_eq!(batches[2].to_vec(), vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn the_platform_limit_is_a_positive_budget() {
+        assert!(command_line_limit() > 1_000);
     }
 }
