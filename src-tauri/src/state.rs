@@ -170,6 +170,14 @@ fn start_askpass(app: &AppHandle) -> Option<ide_ssh::askpass::AskpassServer> {
     });
     match ide_ssh::askpass::AskpassServer::start(exe, on_prompt) {
         Ok(server) => {
+            ide_vcs::set_git_command_observer(
+                ide_ssh::askpass::COMMAND_ENV,
+                Arc::new(|id, success, stderr| {
+                    if let Some(store) = ide_ssh::git_creds::get() {
+                        store.command_finished(id, success, stderr);
+                    }
+                }),
+            );
             ide_vcs::set_askpass_env(server.env());
             Some(server)
         }

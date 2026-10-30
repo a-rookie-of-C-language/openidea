@@ -6,7 +6,7 @@
 
 use crate::secrets::SecretFile;
 use parking_lot::Mutex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -26,21 +26,21 @@ pub enum GitAnswer {
     PromptNew,
 }
 
-/// Shared store: a [`SecretFile`] of `scheme://host` → `user\nsecret`, plus the
-/// state of the git command currently running (credentials it consumed and
+/// Shared store: a [`SecretFile`] of `scheme://host[:port]` → `user\nsecret`, plus the
+/// state of each git command currently running (credentials it consumed and
 /// answers to save when it succeeds).
 #[derive(Clone)]
 pub struct GitCredentials {
     saved: Arc<SecretFile>,
-    session: Arc<Mutex<Session>>,
+    sessions: Arc<Mutex<HashMap<u64, Session>>>,
 }
 
 #[derive(Default)]
 struct Session {
     /// Stored credentials this command used (possibly wrong): forgotten if the
     /// command fails with an authentication error.
-    used: HashSet<String>,
-    /// `scheme://host` → credential the user asked to remember: written when the
+    used: HashMap<String, GitCredential>,
+    /// `scheme://host[:port]` → credential the user asked to remember: written when the
     /// command succeeds.
     pending: HashMap<String, GitCredential>,
 }
@@ -51,7 +51,7 @@ static INSTANCE: Mutex<Option<GitCredentials>> = Mutex::new(None);
 /// Installs the store of `path` (the app's data directory). Called once at
 /// start-up; git prompts before that are simply not remembered.
 pub fn init(path: PathBuf) {
-    *INSTANCE.lock() = Some(GitCredentials { saved: Arc::new(SecretFile::new(path)), session: Arc::default() });
+    *INSTANCE.lock() = Some(GitCredentials { saved: Arc::new(SecretFile::new(path)), sessions: Arc::default() });
 }
 
 /// The installed store, if start-up got that far.
@@ -59,7 +59,7 @@ pub fn get() -> Option<GitCredentials> {
     INSTANCE.lock().clone()
 }
 
-/// `scheme://host` of an HTTPS prompt (`Username for 'https://host'` /
+/// `scheme://host[:port]` of an HTTPS prompt (`Username for 'https://host'` /
 /// `Password for 'https://user@host'`); `None` for anything else (SSH prompts,
 /// passphrases, host-key questions — none of git's business here).
 pub fn prompt_key(prompt: &str) -> Option<String> {
@@ -71,7 +71,6 @@ pub fn prompt_key(prompt: &str) -> Option<String> {
     let authority = rest.split('/').next()?;
     // `user@host` (possibly with a password): keep the host part only.
     let host = authority.rsplit('@').next()?;
-    let host = host.split(':').next()?; // port is not part of the key
     if host.is_empty() {
         return None;
     }
@@ -98,12 +97,12 @@ fn is_auth_failure(stderr: &str) -> bool {
         || s.contains("authorization failed")
         || s.contains("could not read username")
         || s.contains("could not read password")
-        || s.contains("403")
-        || s.contains("401")
+        || s.contains("the requested url returned error: 403")
+        || s.contains("the requested url returned error: 401")
 }
 
 impl GitCredentials {
-    /// The stored credential for `key` (`scheme://host`).
+    /// The stored credential for `key` (`scheme://host[:port]`).
     pub fn credential(&self, key: &str) -> Option<GitCredential> {
         let raw = self.saved.get(key)?;
         let (user, secret) = raw.split_once('\n')?;
@@ -111,7 +110,7 @@ impl GitCredentials {
     }
 
     /// What to do with a git HTTPS `prompt`: answer it from the store or show
-    /// the dialog (`PromptNew` still records `key` as "in play").
+    /// the dialog.
     /// `None`: not a git HTTPS credential prompt.
     pub fn lookup(&self, prompt: &str) -> Option<GitAnswer> {
         let key = prompt_key(prompt)?;
@@ -134,29 +133,32 @@ impl GitCredentials {
     /// The stored answer to `prompt`; `None` falls through to the UI prompt.
     /// Only a consumed *password* marks `key` as used — a stored user name
     /// alone proves nothing about the credential's validity.
-    pub fn answer_saved(&self, prompt: &str) -> Option<String> {
-        match self.lookup(prompt)? {
-            GitAnswer::Auto(a) => {
-                let password = !prompt.to_ascii_lowercase().starts_with("username");
-                if password && let Some(key) = prompt_key(prompt) {
-                    self.session.lock().used.insert(key);
-                }
-                Some(a)
-            }
-            GitAnswer::PromptNew => None,
+    pub fn answer_saved(&self, command_id: u64, prompt: &str) -> Option<String> {
+        let key = prompt_key(prompt)?;
+        let mut sessions = self.sessions.lock();
+        let credential = self.credential(&key)?;
+        if prompt.to_ascii_lowercase().starts_with("username") {
+            return Some(credential.user);
         }
+        if prompt_user(prompt).is_some_and(|user| user != credential.user) {
+            return None;
+        }
+        let answer = credential.secret.clone();
+        sessions.entry(command_id).or_default().used.insert(key, credential);
+        Some(answer)
     }
 
     /// The user's `answer` to `prompt`, remembered when the current git command
     /// succeeds (`remember` = the dialog's "Remember" checkbox). Records the
     /// key only for pending saves: a re-typed answer does not consume the
     /// stored credential, so an auth failure must not delete it.
-    pub fn answered(&self, prompt: &str, answer: &str, remember: bool) {
+    pub fn answered(&self, command_id: u64, prompt: &str, answer: &str, remember: bool) {
         if !remember {
             return;
         }
         let Some(key) = prompt_key(prompt) else { return };
-        let mut s = self.session.lock();
+        let mut sessions = self.sessions.lock();
+        let s = sessions.entry(command_id).or_default();
         let wants_user = prompt.to_ascii_lowercase().starts_with("username");
         let entry = s.pending.entry(key).or_insert(GitCredential { user: String::new(), secret: String::new() });
         if wants_user {
@@ -176,8 +178,9 @@ impl GitCredentials {
     /// credentials and marks used ones as verified; on an authentication
     /// failure, forgets every credential the command consumed so the next run
     /// asks again instead of looping on a wrong password.
-    pub fn command_finished(&self, success: bool, stderr: &str) {
-        let session = std::mem::take(&mut *self.session.lock());
+    pub fn command_finished(&self, command_id: u64, success: bool, stderr: &str) {
+        let mut sessions = self.sessions.lock();
+        let Some(session) = sessions.remove(&command_id) else { return };
         if success {
             for (key, c) in session.pending {
                 if c.secret.is_empty() {
@@ -189,13 +192,15 @@ impl GitCredentials {
             }
         } else if is_auth_failure(stderr) {
             // `used` holds exactly the keys whose stored password was sent.
-            for key in session.used {
-                self.saved.delete(&key);
+            for (key, used) in session.used {
+                if self.credential(&key).as_ref() == Some(&used) {
+                    self.saved.delete(&key);
+                }
             }
         }
     }
 
-    /// Settings › Git: `scheme://host` entries with a saved credential.
+    /// Settings › Git: `scheme://host[:port]` entries with a saved credential.
     pub fn list(&self) -> Vec<String> {
         self.saved.keys()
     }
@@ -213,7 +218,7 @@ mod tests {
     fn store() -> (tempfile::TempDir, GitCredentials) {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("git-credentials.json");
-        (tmp, GitCredentials { saved: Arc::new(SecretFile::new(path)), session: Arc::default() })
+        (tmp, GitCredentials { saved: Arc::new(SecretFile::new(path)), sessions: Arc::default() })
     }
 
     #[test]
@@ -222,7 +227,7 @@ mod tests {
         assert_eq!(prompt_key("Password for 'https://user@github.com': ").as_deref(), Some("https://github.com"));
         assert_eq!(
             prompt_key("Password for 'https://user%40mail.com@example.com:8443/x': ").as_deref(),
-            Some("https://example.com")
+            Some("https://example.com:8443")
         );
         assert_eq!(prompt_key("git@github.com's password: "), None);
         assert_eq!(prompt_key("Enter passphrase for key '/u/.ssh/id_ed25519': "), None);
@@ -233,15 +238,15 @@ mod tests {
         let (_t, c) = store();
         // First run: prompts the user, who checks "remember".
         assert_eq!(c.lookup("Username for 'https://github.com': "), Some(GitAnswer::PromptNew));
-        c.answered("Username for 'https://github.com': ", "me", true);
-        c.answered("Password for 'https://me@github.com': ", "secret", true);
+        c.answered(1, "Username for 'https://github.com': ", "me", true);
+        c.answered(1, "Password for 'https://me@github.com': ", "secret", true);
         // A failure before the password is verified saves nothing.
-        c.command_finished(false, "fatal: some other error");
+        c.command_finished(1, false, "fatal: some other error");
         assert_eq!(c.lookup("Username for 'https://github.com': "), Some(GitAnswer::PromptNew));
 
-        c.answered("Username for 'https://github.com': ", "me", true);
-        c.answered("Password for 'https://me@github.com': ", "secret", true);
-        c.command_finished(true, "");
+        c.answered(1, "Username for 'https://github.com': ", "me", true);
+        c.answered(1, "Password for 'https://me@github.com': ", "secret", true);
+        c.command_finished(1, true, "");
         // Second run: no prompts at all.
         assert_eq!(c.lookup("Username for 'https://github.com': "), Some(GitAnswer::Auto("me".into())));
         assert_eq!(c.lookup("Password for 'https://me@github.com': "), Some(GitAnswer::Auto("secret".into())));
@@ -250,13 +255,14 @@ mod tests {
     #[test]
     fn forgets_a_rejected_credential() {
         let (_t, c) = store();
-        c.answered("Username for 'https://github.com': ", "me", true);
-        c.answered("Password for 'https://me@github.com': ", "wrong", true);
-        c.command_finished(true, "");
+        c.answered(1, "Username for 'https://github.com': ", "me", true);
+        c.answered(1, "Password for 'https://me@github.com': ", "wrong", true);
+        c.command_finished(1, true, "");
         // The next command consumes the stored credential silently.
-        assert_eq!(c.answer_saved("Username for 'https://github.com': ").as_deref(), Some("me"));
-        assert_eq!(c.answer_saved("Password for 'https://me@github.com': ").as_deref(), Some("wrong"));
+        assert_eq!(c.answer_saved(1, "Username for 'https://github.com': ").as_deref(), Some("me"));
+        assert_eq!(c.answer_saved(1, "Password for 'https://me@github.com': ").as_deref(), Some("wrong"));
         c.command_finished(
+            1,
             false,
             "remote: Invalid username or password.\nfatal: Authentication failed for 'https://github.com/x.git/'",
         );
@@ -266,13 +272,108 @@ mod tests {
     #[test]
     fn lists_and_forgets() {
         let (_t, c) = store();
-        c.answered("Username for 'https://a.example.com': ", "u", true);
-        c.answered("Password for 'https://u@a.example.com': ", "p", true);
-        c.answered("Username for 'https://b.example.com': ", "u", true);
-        c.answered("Password for 'https://u@b.example.com': ", "p", true);
-        c.command_finished(true, "");
+        c.answered(1, "Username for 'https://a.example.com': ", "u", true);
+        c.answered(1, "Password for 'https://u@a.example.com': ", "p", true);
+        c.answered(1, "Username for 'https://b.example.com': ", "u", true);
+        c.answered(1, "Password for 'https://u@b.example.com': ", "p", true);
+        c.command_finished(1, true, "");
         assert_eq!(c.list(), vec!["https://a.example.com", "https://b.example.com"]);
         c.forget("https://a.example.com");
         assert_eq!(c.list(), vec!["https://b.example.com"]);
+    }
+    #[test]
+    fn interleaved_commands_do_not_share_pending_or_used_credentials() {
+        for failure_first in [false, true] {
+            let (_t, c) = store();
+            let old = "Password for 'https://me@old.example:8443': ";
+            let new = "Password for 'https://me@new.example:8443': ";
+            c.answered(1, old, "rejected", true);
+            c.command_finished(1, true, "");
+
+            assert_eq!(c.answer_saved(2, old).as_deref(), Some("rejected"));
+            c.answered(3, new, "verified", true);
+            c.command_finished(4, true, "");
+            assert!(c.credential("https://new.example:8443").is_none());
+            assert!(c.credential("https://old.example:8443").is_some());
+            if failure_first {
+                c.command_finished(2, false, "fatal: Authentication failed");
+                assert!(c.credential("https://new.example:8443").is_none());
+                c.command_finished(3, true, "");
+            } else {
+                c.command_finished(3, true, "");
+                assert!(c.credential("https://old.example:8443").is_some());
+                c.command_finished(2, false, "fatal: Authentication failed");
+            }
+            assert!(c.credential("https://old.example:8443").is_none());
+            assert_eq!(c.credential("https://new.example:8443").unwrap().secret, "verified");
+            assert!(c.sessions.lock().is_empty());
+        }
+    }
+
+    #[test]
+    fn unrelated_success_does_not_save_an_unverified_password() {
+        let (_t, c) = store();
+        c.answered(1, "Password for 'https://me@example.com': ", "wrong", true);
+        c.command_finished(2, true, "");
+        assert!(c.list().is_empty());
+        c.command_finished(1, false, "HTTP Basic: Access denied");
+        assert!(c.list().is_empty());
+        assert!(c.sessions.lock().is_empty());
+    }
+
+    #[test]
+    fn stale_failure_does_not_delete_a_newly_verified_password() {
+        let (_t, c) = store();
+        let prompt = "Password for 'https://me@example.com': ";
+        c.answered(1, prompt, "old", true);
+        c.command_finished(1, true, "");
+        c.answer_saved(2, prompt).unwrap();
+        c.answered(3, prompt, "new", true);
+        c.command_finished(3, true, "");
+        c.command_finished(2, false, "Authentication failed");
+        assert_eq!(c.answer_saved(4, prompt).as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn ports_and_ipv6_are_distinct_credential_keys() {
+        for (url, key) in [
+            ("http://me@example.com:8080/repo", "http://example.com:8080"),
+            ("https://me@example.com:8443/repo", "https://example.com:8443"),
+            ("https://me@[::1]:8443/repo", "https://[::1]:8443"),
+            ("https://[::1]/repo", "https://[::1]"),
+        ] {
+            assert_eq!(prompt_key(&format!("Password for '{url}': ")).as_deref(), Some(key));
+        }
+        let (_t, c) = store();
+        c.answered(1, "Password for 'https://me@example.com:8443': ", "secret", true);
+        c.command_finished(1, true, "");
+        assert!(c.answer_saved(2, "Password for 'https://me@example.com:9443': ").is_none());
+        assert!(c.answer_saved(2, "Password for 'https://me@example.com': ").is_none());
+    }
+
+    #[test]
+    fn recognizes_auth_errors_without_matching_arbitrary_numbers() {
+        for message in [
+            "fatal: Authentication failed",
+            "Authentication unsuccessful",
+            "Invalid username or password",
+            "HTTP Basic: Access denied",
+            "Authorization failed",
+            "fatal: could not read Username for 'https://example.com'",
+            "fatal: could not read Password for 'https://example.com'",
+            "fatal: unable to access: The requested URL returned error: 401",
+            "fatal: unable to access: The requested URL returned error: 403",
+        ] {
+            assert!(is_auth_failure(message), "{message}");
+        }
+        for message in [
+            "Failed to connect to example.com port 4010",
+            "Could not resolve host: server403.example",
+            "fatal: repository '/repo/401' does not exist",
+            "remote: error in commit abc403def",
+            "The requested URL returned error: 500",
+        ] {
+            assert!(!is_auth_failure(message), "{message}");
+        }
     }
 }
