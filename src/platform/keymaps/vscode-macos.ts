@@ -256,7 +256,6 @@ export const vscodeMacos: Record<string, string[]> = {
   "run.editConfigs": [],
   "run.updateApplication": [],
   "run.rerun": [],
-  "run.updateApplication": [],
   "coverage.manageReports": [],
   "web.openInBrowser": [],
   "debug.toggleBreakpoint": ["F9"],
