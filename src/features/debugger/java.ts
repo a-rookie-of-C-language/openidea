@@ -5,7 +5,7 @@
  * JVMs started by Maven / Gradle with a JDWP agent are attached to.
  */
 import { executeAction } from "@/platform/actions";
-import { call, commands, IpcError, type LaunchConfig, type RunConfig } from "@/platform/ipc";
+import { call, commands, IpcError, nextRequestId, type LaunchConfig, type RunConfig } from "@/platform/ipc";
 import {
   formatCompileErrors,
   isJvmApplication,
@@ -76,7 +76,7 @@ export async function javaLaunchConfig(rc: RunConfig, root: string): Promise<Lau
   const cwd = rc.cwd ? join(root, rc.cwd) : root;
   const parsed = parseJavaArgs(rc.args);
   if (!parsed.mainClass) throw new Error(`No main class in '${rc.name}'`);
-  const info = await call(commands.javaResolveLaunch(module, parsed.classpath === "test", true));
+  const info = await call(commands.javaResolveLaunch(module, parsed.classpath === "test", true, nextRequestId()));
   if (info.errorCount > 0)
     notifications().notify({
       group: "run",
