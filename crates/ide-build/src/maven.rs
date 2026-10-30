@@ -526,7 +526,11 @@ impl Resolver {
             merge_by(&mut ctx.deps, &p.deps, RawDep::key);
             merge_plugins(&mut ctx.plugins, &p.plugins);
         }
-        merge_by(&mut ctx.profiles, &pom.profiles.iter().map(|p| (p.id.clone(), p.active_by_default)).collect::<Vec<_>>(), |(id, _)| id.clone());
+        merge_by(
+            &mut ctx.profiles,
+            &pom.profiles.iter().map(|p| (p.id.clone(), p.active_by_default)).collect::<Vec<_>>(),
+            |(id, _)| id.clone(),
+        );
         // Managed dependencies: own entries win; imported BOMs fill the gaps.
         let props = self.properties_for(&pom, &ctx, &dir);
         let mut imported: Vec<RawDep> = Vec::new();
