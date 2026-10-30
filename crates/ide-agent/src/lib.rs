@@ -1060,6 +1060,7 @@ impl Task {
         self.push_entry(AgentEntry::User {
             text: prompt.text,
             attachments,
+            images: prompt.images,
             sent_ms: Some(now_ms()),
             done_ms: None,
             steered: true,
@@ -1080,6 +1081,7 @@ impl Task {
         self.push_entry(AgentEntry::User {
             text: prompt.text.clone(),
             attachments,
+            images: prompt.images.clone(),
             sent_ms: Some(now_ms()),
             done_ms: None,
             steered: false,

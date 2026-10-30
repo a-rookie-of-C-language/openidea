@@ -7,6 +7,7 @@ import type {
   AgentCommand,
   AgentEntry,
   AgentEvent,
+  AgentImage,
   AgentProvider,
   AgentTask,
   Isolation,
@@ -410,14 +411,14 @@ export async function forkTask(task: string, turns: number | null): Promise<void
  * Runs the conversation again from turn `turn` with `text` as its message: the agent is
  * stopped if it works, that turn and the later ones are dropped, then `text` is sent.
  */
-export async function rerunFrom(task: string, turn: number, text: string): Promise<void> {
+export async function rerunFrom(task: string, turn: number, text: string, images: AgentImage[] = []): Promise<void> {
   if (isBusy(useAgents.getState().tasks.get(task)?.status ?? "ready")) {
     await cancelTask(task);
     await settled(task);
   }
   await call(commands.agentRollback(task, turn));
   try {
-    await call(commands.agentPrompt(task, { text, files: [], images: [] }, false));
+    await call(commands.agentPrompt(task, { text, files: [], images }, false));
   } catch (e) {
     // Rollback removes the inline editor; recover its text in the session composer.
     const current = composerDraft(task);
