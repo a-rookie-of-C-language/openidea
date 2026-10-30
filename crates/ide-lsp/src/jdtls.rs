@@ -9,7 +9,6 @@ use crate::LspManager;
 use crate::server::{Running, Server};
 use ide_core::error::ErrorKind;
 use ide_core::{IdeError, IdeResult, LanguageId};
-use ide_jsonrpc::RpcError;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use specta::Type;
@@ -20,7 +19,9 @@ use std::time::{Duration, Instant};
 const SERVER: &str = "jdtls";
 /// First start imports the Maven / Gradle model, which can take minutes.
 const READY_TIMEOUT: Duration = Duration::from_secs(240);
-const BUILD_TIMEOUT: Duration = Duration::from_secs(300);
+/// A workspace build of a large multi-module project can take far longer than
+/// an editor request; the user can always cancel the launch waiting on it.
+const BUILD_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 /// How long to retry while the project is still being imported.
 const IMPORT_WAIT: Duration = Duration::from_secs(90);
@@ -196,7 +197,13 @@ impl LspManager {
         let fut = run.peer.request::<Value, Value>(method, params, None);
         match tokio::time::timeout(timeout, fut).await {
             Ok(r) => r.map_err(|e| crate::rpc_err(&server.name, method, e)),
-            Err(_) => Err(crate::rpc_err(&server.name, method, RpcError::Timeout)),
+            Err(_) => Err(IdeError::new(
+                ErrorKind::Protocol,
+                format!(
+                    "{SERVER}: {method} timed out after {} s; retry, or check that jdtls is not stuck",
+                    timeout.as_secs()
+                ),
+            )),
         }
     }
 
