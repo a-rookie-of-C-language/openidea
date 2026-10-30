@@ -269,7 +269,7 @@ export function activate(): () => void {
         icon: "settings",
         when: MAVEN_WHEN,
         keywords: ["maven home", "mvn", "settings", "preferences"],
-        run: () => executeAction("file.settings", "build.maven"),
+        run: () => void executeAction("file.settings", "build.maven"),
       },
       {
         id: "gradle.reload",
