@@ -234,7 +234,7 @@ impl Host {
                     // A repository was cloned / initialised / removed below the project: its
                     // `.git/HEAD` (the watcher reports nothing else of `.git`) appeared or went.
                     let known = repos.read().roots();
-                    let git_dirs = changed.iter().chain(&batch.removed).any(|p| {
+                    let git_dirs = changed.iter().chain(&batch.removed).chain(&batch.vcs).any(|p| {
                         let Some(dir) = p.ends_with(".git/HEAD").then(|| p.parent().and_then(Path::parent)).flatten()
                         else {
                             return false;
@@ -244,7 +244,15 @@ impl Host {
                     if git_dirs {
                         scan_repositories(&root, &repos, &settings, &sink);
                     }
-                    sink.emit(IdeEvent::VcsChanged { root: root.clone().into() });
+                    // `.git/index` is written back by `vcs_status` itself: treating
+                    // it as a reason to refresh schedules another status, which
+                    // writes the index again — an idle refresh loop that ends up
+                    // pinning the UI. Refs / HEAD / packed-refs changes are the
+                    // ones that mean "git state moved" (checkout, commit, clone).
+                    let vcs_moved = batch.vcs.iter().any(|p| !p.ends_with(".git/index"));
+                    if git_dirs || vcs_moved {
+                        sink.emit(IdeEvent::VcsChanged { root: root.clone().into() });
+                    }
                 }),
             )?
         };
