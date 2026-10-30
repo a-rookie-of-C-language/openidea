@@ -4864,9 +4864,10 @@ tags?: PushTags | null } |
 { op: "deleteBranch"; branch: string } | 
 /**
  *  Pushes local `branch` (only up to `revision` when set) to its upstream, or to
- *  remote branch `target` of the same remote.
+ *  remote branch `target`; `remote` overrides the upstream's remote (Push dialog's
+ *  remote picker).
  */
-{ op: "pushBranch"; branch: string; revision: string | null; force_with_lease: boolean; target?: string | null } | 
+{ op: "pushBranch"; branch: string; revision: string | null; force_with_lease: boolean; target?: string | null; remote?: string | null } | 
 /**  Fast-forwards local `branch` (not checked out) to its upstream. */
 { op: "updateBranch"; branch: string } | 
 /**  Pull dialog: `branches` of `remote` (none = the configured merge branch). */

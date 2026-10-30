@@ -45,13 +45,16 @@ pub enum RemoteOp {
         branch: String,
     },
     /// Pushes local `branch` (only up to `revision` when set) to its upstream, or to
-    /// remote branch `target` of the same remote.
+    /// remote branch `target`; `remote` overrides the upstream's remote (Push dialog's
+    /// remote picker).
     PushBranch {
         branch: String,
         revision: Option<String>,
         force_with_lease: bool,
         #[serde(default)]
         target: Option<String>,
+        #[serde(default)]
+        remote: Option<String>,
     },
     /// Fast-forwards local `branch` (not checked out) to its upstream.
     UpdateBranch {
@@ -454,12 +457,17 @@ pub async fn vcs_remote(
                 r.push_with_tags(force_with_lease, set_upstream, tags, &cancel, &out)
             }
             RemoteOp::DeleteBranch { branch } => r.delete_remote_branch(&branch, &cancel, &out),
-            RemoteOp::PushBranch { branch, revision, force_with_lease, target } => match target {
-                Some(target) => {
-                    r.push_branch_to(&branch, revision.as_deref(), &target, force_with_lease, &cancel, &out)
-                }
-                None => r.push_branch(&branch, revision.as_deref(), force_with_lease, &cancel, &out),
-            },
+            RemoteOp::PushBranch { branch, revision, force_with_lease, target, remote } => r.push_branch_to(
+                &branch,
+                PushBranchOptions {
+                    revision: revision.as_deref(),
+                    target: target.as_deref(),
+                    remote: remote.as_deref(),
+                    force_with_lease,
+                },
+                &cancel,
+                &out,
+            ),
             RemoteOp::UpdateBranch { branch } => r.update_branch(&branch, &cancel, &out),
             RemoteOp::PullFrom { remote, branches, rebase, options } => {
                 r.pull_from(&remote, &branches, rebase, &options, &cancel, &out)
