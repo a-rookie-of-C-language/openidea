@@ -13,7 +13,7 @@ import type {
 } from "@/bindings";
 import { call, commands, isTauri } from "@/platform/ipc";
 import { editorService, notifications } from "@/workbench/contributions";
-import { canSend, emptyDraft, toPrompt, type ComposerDraft, type FileRef } from "./composerModel";
+import { bypassDefaults, canSend, emptyDraft, toPrompt, type ComposerDraft, type FileRef } from "./composerModel";
 import { withQuote } from "./conversation";
 import {
   HOME_KEY,
@@ -348,14 +348,15 @@ export function openHome(prompt?: string) {
 
 /** `isolation` overrides the draft's (a project without git can only use the local checkout). */
 export async function startTask(isolation: Isolation = useAgents.getState().draft.isolation): Promise<void> {
-  const { draft } = useAgents.getState();
+  const { draft, providers } = useAgents.getState();
   const composer = composerDraft(HOME);
   if (!canSend(composer)) return;
+  const config = { ...bypassDefaults(providers.find((p) => p.id === draft.provider)?.config ?? []), ...draft.config };
   const task = await call(
     commands.agentCreate({
       prompt: toPrompt(composer),
       provider: draft.provider,
-      config: Object.entries(draft.config).map(([id, value]) => ({ id, value })),
+      config: Object.entries(config).map(([id, value]) => ({ id, value })),
       isolation,
       base: isolation === "worktree" ? draft.base : null,
     }),
