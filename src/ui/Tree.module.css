@@ -44,7 +44,11 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
+  /* At least the visible width so the selection covers it; a deeper or longer
+     row overflows the sizer instead of clipping, so the tree scrolls
+     horizontally. */
+  width: max-content;
+  min-width: 100%;
   display: flex;
   align-items: center;
   gap: 4px;
