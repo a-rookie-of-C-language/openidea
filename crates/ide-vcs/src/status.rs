@@ -20,6 +20,12 @@ pub(crate) fn status(r: &Repo) -> IdeResult<Vec<FileStatus>> {
     let mut conflicts: HashSet<String> = HashSet::new();
     let ignored = r.ignored.read().unwrap_or_else(|p| p.into_inner()).clone();
 
+    // Stamp before status can read the index: stamping after the load could capture
+    // an external `git switch`, `add` or commit's new index and allow the stale
+    // snapshot to overwrite it. A change between the stamp and the read only skips
+    // one stat refresh, which is safe.
+    let index_path = repo.index_path();
+    let opened = crate::index_writes::stamp(&index_path);
     let platform = repo
         .status(gix::progress::Discard)
         .map_err(gx)?
@@ -28,11 +34,6 @@ pub(crate) fn status(r: &Repo) -> IdeResult<Vec<FileStatus>> {
         .index_worktree_submodules(gix::status::Submodule::AsConfigured { check_dirty: true })
         .tree_index_track_renames(gix::status::tree_index::TrackRenames::Given(gix::diff::Rewrites::default()));
     let mut iter = platform.into_iter(Vec::<gix::bstr::BString>::new()).map_err(gx)?;
-    // The stat-refresh write-back below is a read-modify-write over the index this
-    // iterator just opened; remember its identity so an external `git switch`, `add`
-    // or commit landing in between is not overwritten by that stale snapshot.
-    let index_path = repo.index_path();
-    let opened = crate::index_writes::stamp(&index_path);
     for item in iter.by_ref() {
         let item = item.map_err(gx)?;
         match item {
@@ -185,25 +186,24 @@ mod tests {
     fn an_external_index_write_during_status_is_not_overwritten() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        let owned = dir.to_path_buf();
-        git(&owned, &["init", "-q"]);
-        git(&owned, &["config", "user.name", "Test User"]);
-        git(&owned, &["config", "user.email", "test@example.com"]);
-        git(&owned, &["config", "commit.gpgsign", "false"]);
-        std::fs::write(owned.join("base.txt"), "base\n").unwrap();
-        commit_all(&owned, "base");
+        git(dir, &["init", "-q"]);
+        git(dir, &["config", "user.name", "Test User"]);
+        git(dir, &["config", "user.email", "test@example.com"]);
+        git(dir, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(dir.join("base.txt"), "base\n").unwrap();
+        commit_all(dir, "base");
         // A branch that differs by a file and a deletion, so a switch rewrites the index.
-        git(&owned, &["checkout", "-q", "-b", "other"]);
-        std::fs::write(owned.join("other.txt"), "other\n").unwrap();
-        std::fs::remove_file(owned.join("base.txt")).unwrap();
-        commit_all(&owned, "other");
-        git(&owned, &["checkout", "-q", "main"]);
+        git(dir, &["checkout", "-q", "-b", "other"]);
+        std::fs::write(dir.join("other.txt"), "other\n").unwrap();
+        std::fs::remove_file(dir.join("base.txt")).unwrap();
+        commit_all(dir, "other");
+        git(dir, &["checkout", "-q", "main"]);
         // Rewrite a file with identical content: its stat info no longer matches the
         // index, so the status run refreshes it and has an index write-back to make.
-        std::fs::write(owned.join("base.txt"), "base\n").unwrap();
+        std::fs::write(dir.join("base.txt"), "base\n").unwrap();
 
-        let repo = Repo::discover(&owned).unwrap().expect("repository found");
-        let switched = owned.clone();
+        let repo = Repo::discover(dir).unwrap().expect("repository found");
+        let switched = dir.to_path_buf();
         let hook_ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let ran = hook_ran.clone();
         BETWEEN_READ_AND_WRITE.with(|h| {
@@ -215,9 +215,8 @@ mod tests {
         // The status result itself describes the tree as it was when it read the index
         // (base.txt still modified there); what matters is that it does not write that
         // snapshot back over the index `git switch` produced.
-        let status = repo.status().expect("status runs");
+        repo.status().expect("status runs");
         assert!(hook_ran.load(std::sync::atomic::Ordering::SeqCst), "the external write landed mid-status");
-        let _ = &status;
 
         // The index on disk is the one `git switch` wrote: its entries match the new branch.
         let listed = Command::new("git").current_dir(dir).args(["ls-files"]).output().unwrap();
