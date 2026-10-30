@@ -7,6 +7,7 @@ import { EditorSelection } from "@codemirror/state";
 import { create } from "zustand";
 import { setContext } from "@/platform/context";
 import { shortcutLabel } from "@/platform/keymap";
+import { isSameOrInside } from "@/platform/paths";
 import { basename, useProject } from "@/platform/project";
 import { editorPrefs } from "@/platform/editorSettings";
 import {
@@ -1061,7 +1062,7 @@ export class EditorController implements SlotHost {
   /** Close exactly the originally selected tabs, evaluating references after every await. */
   private removeGuarded(
     select: (s: TabsState) => TabsState,
-    options: { protect?: (tab: Tab) => boolean; clearHistory?: boolean } = {},
+    options: { protect?: (tab: Tab) => boolean; clearHistory?: boolean; beforeRemove?: () => Promise<boolean> } = {},
   ): Promise<boolean> {
     const generation = this.projectGeneration;
     const initial = useTabs.getState();
@@ -1131,6 +1132,7 @@ export class EditorController implements SlotHost {
           }
           authorized.add(d.input.key);
         }
+        if (options.beforeRemove && !(await options.beforeRemove())) return false;
         // Commit only the original target ids against the latest tab state.
         if (generation !== this.projectGeneration) return false;
         const before = useTabs.getState();
@@ -1305,34 +1307,45 @@ export class EditorController implements SlotHost {
   changeSplitOrientation(paneId: string) {
     this.apply((s) => changeSplitOrientation(s, paneId));
   }
-  /**
-   * IDEA "drag a tab out": the file opens in a forced new window and the tab
-   * here closes. Only the detach moves: the dirty guard stays with the normal
-   * close below, so unsaved changes still ask Save / Don't Save / Cancel.
-   * Resolves true when the tab closed, false when refused or cancelled.
-   */
+  /** Save or resolve the dirty guard, open the window, then remove the original tab. */
   async detachTab(paneId: string, tabId: string): Promise<boolean> {
     const tab = useTabs.getState().panes[paneId]?.tabs.find((t) => t.id === tabId);
-    const path = tab?.input.kind === "file" ? tab.input.path : undefined;
-    if (!tab || !path) return false;
+    const path = tab?.input.path;
+    if (
+      !tab ||
+      !path ||
+      (tab.input.kind !== "file" && !documentLifecycle(tab.input, useContributions.getState().editorKinds))
+    )
+      return false;
     if (isRemoteWindow()) {
       notifications().notify({ level: "warning", title: t("app.window.desktopOnly") });
       return false;
     }
     const project = useProject.getState().project;
-    const inProject = !!project && (path === project.root || path.startsWith(`${project.root}/`));
-    try {
-      await call(commands.windowOpenFileInNewWindow(inProject ? project.root : null, path));
-    } catch (e) {
-      notifications().notify({
-        level: "error",
-        title: t("app.window.openFailed", { name: basename(path) }),
-        body: e instanceof Error ? e.message : String(e),
-        key: `app.open:${path}`,
-      });
-      return false;
-    }
-    return this.closeTab(paneId, tabId);
+    const inProject =
+      !!project && (project.workspace?.projects ?? [project.root]).some((root) => isSameOrInside(path, root));
+    return this.removeGuarded((s) => (s.panes[paneId] ? closeTab(s, paneId, tabId) : s), {
+      beforeRemove: async () => {
+        if (!useTabs.getState().panes[paneId]?.tabs.some((t) => t.id === tabId)) return false;
+        if (isTextTab(tab)) {
+          const slot = await this.ensureSlot(tabId);
+          if (!slot) return false;
+          await slot.model.save("explicit");
+        }
+        try {
+          await call(commands.windowOpenFileInNewWindow(inProject ? project.root : null, path));
+          return true;
+        } catch (e) {
+          notifications().notify({
+            level: "error",
+            title: t("app.window.openFailed", { name: basename(path) }),
+            body: e instanceof Error ? e.message : String(e),
+            key: `app.open:${path}`,
+          });
+          return false;
+        }
+      },
+    });
   }
   /** IDEA "Open in Opposite Group": the tab stays and a copy opens next door (or in a new split). */
   openInOpposite(paneId: string, tabId: string) {
@@ -1634,7 +1647,8 @@ export class EditorController implements SlotHost {
             { label: "Unsplit All", run: () => void this.unsplitAll(paneId) },
           ] as MenuItem[])
         : []),
-      ...(tab.input.kind === "file" && tab.input.path
+      ...(tab.input.path &&
+      (tab.input.kind === "file" || documentLifecycle(tab.input, useContributions.getState().editorKinds))
         ? ([{ label: "Open in New Window", run: () => void this.detachTab(paneId, tab.id) }] as MenuItem[])
         : []),
       { kind: "separator" },
