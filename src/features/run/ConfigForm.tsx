@@ -764,10 +764,7 @@ function CompoundMembers({
   const members = config.compound ?? [];
   const addRef = useRef<HTMLButtonElement>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const hasCandidates = all.some(
-    (c) =>
-      c.id !== config.id && !members.includes(c.id) && !compoundCycle({ ...config, compound: [...members, c.id] }, all),
-  );
+  const hasCandidates = memberRows(config, all, members, "").length > 0;
   return (
     <Field label="Configurations" error={error} top>
       <div className={styles.taskList} role="list" aria-label={tx("Configurations of the compound")}>
