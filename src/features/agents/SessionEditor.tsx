@@ -1216,10 +1216,58 @@ const KIND_COLOR: Partial<Record<AgentChange["kind"], string>> = {
   conflicted: "var(--vcs-conflict)",
 };
 
+const CHANGES_COLLAPSED_KEY = "openidea.agents.changesCollapsed.v1";
+
+function loadCollapsed(): boolean {
+  try {
+    const raw = globalThis.localStorage?.getItem(CHANGES_COLLAPSED_KEY);
+    // Collapsed on first run: the chat is the focus, the diff opens on demand.
+    return raw === null ? true : (JSON.parse(raw) as boolean);
+  } catch {
+    return true;
+  }
+}
+
+function saveCollapsed(value: boolean) {
+  try {
+    globalThis.localStorage?.setItem(CHANGES_COLLAPSED_KEY, JSON.stringify(value));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 function ChangesPane({ task, changes, head }: { task: AgentTask; changes: AgentChange[] | null; head: string | null }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [collapsed, setCollapsed] = useState<boolean>(loadCollapsed);
   const added = changes?.reduce((n, c) => n + c.added, 0) ?? 0;
   const removed = changes?.reduce((n, c) => n + c.removed, 0) ?? 0;
+  const toggleCollapsed = (next: boolean) => {
+    setCollapsed(next);
+    saveCollapsed(next);
+  };
+  if (collapsed) {
+    return (
+      <aside className={clsx(styles.changes, styles.changesCollapsed)} aria-label={tx("Changes")}>
+        <IconButton
+          icon="chevron-left"
+          title={tx("Show changes")}
+          size="small"
+          onClick={() => toggleCollapsed(false)}
+        />
+        <button
+          type="button"
+          className={styles.changesRail}
+          title={tx("Show changes")}
+          onClick={() => toggleCollapsed(false)}
+        >
+          <span className={styles.changesRailLabel}>
+            <T>Changes</T>
+          </span>
+          {changes && changes.length > 0 && <span className={styles.changesRailCount}>{changes.length}</span>}
+        </button>
+      </aside>
+    );
+  }
   return (
     <aside className={styles.changes} aria-label={tx("Changes")}>
       <div className={styles.changesHeader}>
@@ -1233,6 +1281,12 @@ function ChangesPane({ task, changes, head }: { task: AgentTask; changes: AgentC
         )}
         <span className={styles.bannerSpacer} />
         <IconButton icon="refresh" title="Refresh" size="small" onClick={() => void refreshChanges(task.id)} />
+        <IconButton
+          icon="chevron-right"
+          title={tx("Hide changes")}
+          size="small"
+          onClick={() => toggleCollapsed(true)}
+        />
       </div>
       {(head ?? task.base) && (
         <div className={styles.changesSummary}>
