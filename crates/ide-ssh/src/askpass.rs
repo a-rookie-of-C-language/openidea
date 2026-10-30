@@ -40,6 +40,12 @@ pub fn classify(prompt: &str) -> AskpassKind {
     }
 }
 
+/// Whether the UI's credential dialog should offer to remember the answer:
+/// git's HTTPS password prompts only (the user name travels inside them).
+pub fn remembers(prompt: &str) -> bool {
+    crate::git_creds::prompt_key(prompt).is_some() && classify(prompt) == AskpassKind::Secret
+}
+
 #[derive(Serialize, Deserialize)]
 struct Request {
     token: String,
@@ -51,7 +57,12 @@ struct Response {
     answer: Option<String>,
 }
 
-type Pending = Arc<Mutex<HashMap<u64, mpsc::Sender<Option<String>>>>>;
+type Pending = Arc<Mutex<HashMap<u64, PendingPrompt>>>;
+
+struct PendingPrompt {
+    prompt: String,
+    tx: mpsc::Sender<Option<String>>,
+}
 
 /// Serves prompts to `on_prompt`; answers come back through [`AskpassServer::answer`].
 pub struct AskpassServer {
@@ -85,10 +96,16 @@ impl AskpassServer {
         Ok(Self { port, token, exe, pending })
     }
 
-    /// Answers prompt `id` (`None`: cancelled).
-    pub fn answer(&self, id: u64, answer: Option<String>) {
-        if let Some(tx) = self.pending.lock().remove(&id) {
-            let _ = tx.send(answer);
+    /// Answers prompt `id` (`None`: cancelled). `remember` asks the git
+    /// credential store to keep the answer once the command succeeds.
+    pub fn answer(&self, id: u64, answer: Option<String>, remember: bool) {
+        if let Some(p) = self.pending.lock().remove(&id) {
+            if let Some(a) = answer.as_deref()
+                && let Some(store) = crate::git_creds::get()
+            {
+                store.answered(&p.prompt, a, remember);
+            }
+            let _ = p.tx.send(answer);
         }
     }
 
@@ -123,9 +140,19 @@ fn serve(
     let answer = if req.token != token {
         None
     } else {
-        let (tx, rx) = mpsc::channel();
-        pending.lock().insert(id, tx);
         let prompt = req.prompt.trim().to_owned();
+        // A saved git HTTPS credential answers silently; a rejected one is
+        // forgotten by `git_creds::command_finished`, not here (the command
+        // may still be running and could retry).
+        if let Some(store) = crate::git_creds::get()
+            && let Some(answer) = store.answer_saved(&prompt)
+        {
+            let mut out = stream;
+            let _ = writeln!(out, "{}", serde_json::to_string(&Response { answer: Some(answer) }).unwrap_or_default());
+            return;
+        }
+        let (tx, rx) = mpsc::channel();
+        pending.lock().insert(id, PendingPrompt { prompt: prompt.clone(), tx });
         on_prompt(AskpassPrompt { id, kind: classify(&prompt), prompt });
         let answer = rx.recv_timeout(ANSWER_TIMEOUT).ok().flatten();
         pending.lock().remove(&id);

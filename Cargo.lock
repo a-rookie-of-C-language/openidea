@@ -4609,6 +4609,7 @@ dependencies = [
  "encoding_rs",
  "gix",
  "ide-core",
+ "ide-ssh",
  "ignore",
  "libc",
  "regex-lite",

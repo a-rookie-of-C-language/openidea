@@ -164,6 +164,7 @@ pub(crate) fn run_raw_env(
 /// Runs git and maps a non-zero exit status to an error carrying git's message.
 pub(crate) fn run(root: &Path, args: &[&str], stdin: Option<&[u8]>) -> IdeResult<Output> {
     let out = run_raw(root, args, stdin)?;
+    git_command_finished(out.code == Some(0), &String::from_utf8_lossy(&out.stderr));
     if out.code == Some(0) { Ok(out) } else { Err(failure(args, &out.stderr, &out.stdout, out.code)) }
 }
 
@@ -175,7 +176,18 @@ pub(crate) fn run_env(
     env: &[(&str, &std::ffi::OsStr)],
 ) -> IdeResult<Output> {
     let out = run_raw_env(root, args, stdin, env)?;
+    git_command_finished(out.code == Some(0), &String::from_utf8_lossy(&out.stderr));
     if out.code == Some(0) { Ok(out) } else { Err(failure(args, &out.stderr, &out.stdout, out.code)) }
+}
+
+/// Tells the askpass credential store how a `git` child ended: a success saves
+/// the credentials the user asked to remember, an authentication failure
+/// forgets the ones it used so the next command asks again. Local operations
+/// (commit, diff) simply report "nothing in play" and flush nothing.
+fn git_command_finished(success: bool, stderr: &str) {
+    if let Some(store) = ide_ssh::git_creds::get() {
+        store.command_finished(success, stderr);
+    }
 }
 
 fn spawn_error(e: std::io::Error) -> IdeError {
@@ -332,11 +344,13 @@ pub(crate) fn run_streaming_env(
         let _ = r.join();
     }
     if status.success() {
+        git_command_finished(true, "");
         return Ok(());
     }
     let relevant: Vec<&str> =
         conflicts.iter().chain(stderr_tail.iter()).map(String::as_str).filter(|l| !is_progress_line(l)).collect();
     let msg = relevant.join("\n");
+    git_command_finished(false, &msg);
     Err(failure(args, msg.as_bytes(), b"", status.code()))
 }
 
