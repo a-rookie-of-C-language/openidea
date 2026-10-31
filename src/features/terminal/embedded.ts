@@ -86,7 +86,7 @@ export function createEmbeddedTerminal(host: HTMLElement, opts: EmbeddedTerminal
     }),
   ];
   const removePaste = installTerminalPaste(host, (text) => term.paste(text));
-  const removeDrop = installTerminalDrop((text) => term.paste(text));
+  const removeDrop = installTerminalDrop(host, (text) => term.paste(text));
   term.open(host);
   if (opts["aria-label"]) term.textarea?.setAttribute("aria-label", opts["aria-label"]);
 

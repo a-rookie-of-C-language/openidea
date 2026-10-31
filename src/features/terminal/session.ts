@@ -279,7 +279,7 @@ export class TerminalSession {
     );
     this.disposables.push(
       { dispose: installTerminalPaste(this.host, (text) => this.paste(text)) },
-      { dispose: installTerminalDrop((text) => this.paste(text)) },
+      { dispose: installTerminalDrop(this.host, (text) => this.paste(text)) },
     );
     this.host.addEventListener("mousedown", this.onMiddleClick);
   }

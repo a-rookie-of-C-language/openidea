@@ -1,35 +1,112 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands } from "@/platform/ipc";
+import { usePlatform } from "@/platform/platformInfo";
+import { isRemoteWindow } from "@/platform/remote";
+import { handleFileDrop } from "@/workbench/fileDrop";
 import { droppedPathsText, installTerminalDrop } from "./drop";
 
-beforeEach(() => vi.stubGlobal("__TAURI_INTERNALS__", {}));
+vi.mock("@/platform/remote", () => ({ isRemoteWindow: vi.fn(() => false) }));
+
+const initialOs = usePlatform.getState().os;
+const originalElementFromPoint = document.elementFromPoint;
+
+beforeEach(() => {
+  vi.stubGlobal("__TAURI_INTERNALS__", {});
+  usePlatform.setState({ os: "macos" });
+});
+
+afterEach(() => {
+  document.body.replaceChildren();
+  document.elementFromPoint = originalElementFromPoint;
+  usePlatform.setState({ os: initialOs });
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.mocked(isRemoteWindow).mockReturnValue(false);
+});
 
 describe("terminal drop", () => {
-  it("quotes paths with spaces and joins files with newlines", () => {
+  it.each(["macos", "linux"])("quotes POSIX paths and joins files with spaces on %s", (os) => {
+    usePlatform.setState({ os });
     expect(droppedPathsText(["/plain/file.ts"])).toBe("/plain/file.ts");
-    expect(droppedPathsText(["/a b/c.png", "/plain", "C:/dir/e f"])).toBe("'/a b/c.png'\n/plain\n'C:/dir/e f'");
+    expect(droppedPathsText(["/a b/c.png", "/plain", "C:/dir/e f"])).toBe("'/a b/c.png' /plain 'C:/dir/e f'");
+    expect(droppedPathsText(["/it's here"])).toBe("'/it'\\''s here'");
   });
 
-  it("pastes the drop on the terminal under the cursor, once per registration", async () => {
+  it("uses double quotes for Windows paths with spaces or shell metacharacters", () => {
+    usePlatform.setState({ os: "windows" });
+    expect(droppedPathsText(["C:\\plain\\file.ts", "C:\\a b\\c.png", "C:\\it's here\\"])).toBe(
+      'C:\\plain\\file.ts "C:\\a b\\c.png" "C:\\it\'s here\\"',
+    );
+    expect(droppedPathsText(["C:\\a&b\\c.png"])).toBe('"C:\\a&b\\c.png"');
+  });
+
+  it("pastes only into the host under the cursor without executing, regardless of registration order", async () => {
     const list = vi.spyOn(commands, "clipboardFileList");
-    const host = document.createElement("div");
-    host.dataset.terminalSession = "s1";
+    const hosts = [document.createElement("div"), document.createElement("div")];
+    const targets = hosts.map((host, i) => {
+      host.dataset.terminalSession = `s${i}`;
+      const child = document.createElement("span");
+      host.append(child);
+      return child;
+    });
     const elsewhere = document.createElement("div");
-    document.body.replaceChildren(host, elsewhere);
-    document.elementFromPoint = ((x: number) => (x === 1 ? host : elsewhere)) as typeof document.elementFromPoint;
-    const pasted: string[] = [];
-    const remove = installTerminalDrop((text) => pasted.push(text));
-    const { handleFileDrop } = await import("@/workbench/fileDrop");
+    document.body.replaceChildren(...hosts, elsewhere);
+    document.elementFromPoint = ((x: number) => targets[x] ?? elsewhere) as typeof document.elementFromPoint;
+    const pasted = [vi.fn(), vi.fn()] as const;
+    const remove = hosts.map((host, i) => installTerminalDrop(host, pasted[i]!));
     try {
       await handleFileDrop(["/a b", "/plain"], 1, 1);
+      expect(pasted[0]).not.toHaveBeenCalled();
+      expect(pasted[1].mock.calls).toEqual([["'/a b' /plain"]]);
+      await handleFileDrop(["/first"], 0, 1);
+      expect(pasted[0].mock.calls).toEqual([["/first"]]);
+      await handleFileDrop([], 1, 1);
       await handleFileDrop(["/img/pic.png"], 9, 9);
-      expect(pasted).toEqual(["'/a b'\n/plain\n"]);
+      expect(pasted[1]).toHaveBeenCalledOnce();
       expect(list).not.toHaveBeenCalled();
-      remove();
+      remove.forEach((dispose) => dispose());
       await handleFileDrop(["/late"], 1, 1);
-      expect(pasted).toHaveLength(1);
+      expect(pasted[1]).toHaveBeenCalledOnce();
     } finally {
-      document.body.replaceChildren();
+      remove.forEach((dispose) => dispose());
+    }
+  });
+
+  it("ignores detached and hidden sessions when dropping on an embedded Run console", async () => {
+    const detached = document.createElement("div");
+    detached.dataset.terminalSession = "detached";
+    const hidden = document.createElement("div");
+    hidden.dataset.terminalSession = "hidden";
+    hidden.hidden = true;
+    const runHost = document.createElement("div");
+    const child = document.createElement("span");
+    runHost.append(child);
+    document.body.replaceChildren(hidden, runHost);
+    document.elementFromPoint = () => child;
+    const pasted = [vi.fn(), vi.fn(), vi.fn()] as const;
+    const remove = [detached, hidden, runHost].map((host, i) => installTerminalDrop(host, pasted[i]!));
+    try {
+      await handleFileDrop(["/run input"], 1, 1);
+      expect(pasted[0]).not.toHaveBeenCalled();
+      expect(pasted[1]).not.toHaveBeenCalled();
+      expect(pasted[2].mock.calls).toEqual([["'/run input'"]]);
+    } finally {
+      remove.forEach((dispose) => dispose());
+    }
+  });
+
+  it("leaves local path drops unhandled in a remote window", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    document.elementFromPoint = () => host;
+    const paste = vi.fn();
+    const remove = installTerminalDrop(host, paste);
+    try {
+      vi.mocked(isRemoteWindow).mockReturnValue(true);
+      expect(handleFileDrop(["/local/file"], 1, 1)).toBeNull();
+      expect(paste).not.toHaveBeenCalled();
+    } finally {
+      remove();
     }
   });
 });
