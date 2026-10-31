@@ -24,7 +24,9 @@ const TASK = {
 /** Seeds one task in the agents store (no backend in plain-browser mode) and docks it. */
 async function seedAndDock(page: Page) {
   await page.evaluate(async (task) => {
-    const store = await import("/src/features/agents/store.ts");
+    // Paths go through variables: knip can't resolve these browser-absolute URLs.
+    const storePath = "/src/features/agents/store.ts";
+    const store = await import(storePath);
     store.useAgents.setState({
       loaded: true,
       error: null,
@@ -83,9 +85,12 @@ test("docks a session tab dropped on the tool window", async ({ page }) => {
   await page.getByRole("treeitem", { name: "README.md", exact: true }).dblclick();
   await page.getByRole("tab", { name: "README.md" }).waitFor();
   await page.evaluate(async (task) => {
-    const store = await import("/src/features/agents/store.ts");
-    const { TOOL_WINDOW } = await import("/src/features/agents/model.ts");
-    const { toolWindowService } = await import("/src/workbench/contributions.ts");
+    const storePath = "/src/features/agents/store.ts";
+    const modelPath = "/src/features/agents/model.ts";
+    const contributionsPath = "/src/workbench/contributions.ts";
+    const store = await import(storePath);
+    const { TOOL_WINDOW } = await import(modelPath);
+    const { toolWindowService } = await import(contributionsPath);
     store.useAgents.setState({
       loaded: true,
       error: null,
