@@ -89,6 +89,26 @@ export function activate(): () => void {
           ? [{ kind: "action", action: "agents.sendToAgent", arg: menu === "projectView" ? paths : undefined }]
           : [],
     }),
+    registerMenuGroup({
+      // Session tabs have no path; "Open in Tool Window" docks them beside the task list.
+      id: "agents.tab",
+      menus: ["editorTab"],
+      order: 50,
+      items: (_menu, { paths, input }) => {
+        const task = input?.kind === SESSION_KIND ? (input.data as { task?: string } | undefined)?.task : undefined;
+        return paths.length || !task
+          ? []
+          : [
+              {
+                kind: "action",
+                action: "agents.dockTask",
+                label: "Open in Tool Window",
+                icon: "open-in-tool-window",
+                arg: task,
+              },
+            ];
+      },
+    }),
     registerActions([
       ...taskActions,
       {

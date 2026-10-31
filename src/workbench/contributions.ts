@@ -897,6 +897,8 @@ export interface MenuGroupContext {
   text?: string;
   /** Editor menu: 0-based caret line; gutter menu: the clicked line. */
   line?: number;
+  /** The tab's input, when the menu is for an editor tab without a path. */
+  input?: EditorInput;
 }
 
 export interface MenuGroupContribution {

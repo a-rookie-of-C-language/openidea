@@ -3,9 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { AgentStatus as Status, AgentTask } from "@/bindings";
 import { maybeEditorService, type EditorInput } from "@/workbench/contributions";
 import { EmptyState, Icon, IconButton, Spinner, T, Tree, showContextMenu } from "@/ui";
-import { SESSION_KIND, age, branchLabel, groupTasks, type TaskGroup } from "./model";
-import { openHome, openTask, useAgents } from "./store";
+import { SESSION_KIND, age, branchLabel, groupTasks, sessionKey, type TaskGroup } from "./model";
+import { dockTask, openHome, openTask, useAgents } from "./store";
 import { taskMenu } from "./taskActions";
+import { SessionEditor } from "./SessionEditor";
 import styles from "./Agents.module.css";
 import { basename, useProject } from "@/platform/project";
 import { useTx } from "@/platform/i18n";
@@ -51,6 +52,7 @@ export function AgentsView() {
   const tasks = useAgents((s) => s.tasks);
   const unread = useAgents((s) => s.unread);
   const providers = useAgents((s) => s.providers);
+  const docked = useAgents((s) => s.docked);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(["g:archived"]));
   const [selected, setSelected] = useState<Set<string>>(() => {
     const task = sessionTask(maybeEditorService()?.activeInput?.());
@@ -79,80 +81,110 @@ export function AgentsView() {
     );
   if (error) return <EmptyState title="Cannot load agent tasks">{error}</EmptyState>;
   const providerName = (id: string) => providers.find((p) => p.id === id)?.name ?? id;
+  // While a conversation is docked, clicking a task switches it instead of opening a tab.
+  const showTask = (task: string) => (docked ? dockTask(task) : openTask(task));
+  const dockedTitle = docked ? (tasks.get(docked)?.title ?? docked) : null;
 
   return (
     <div className={styles.view}>
-      <Tree<Node>
-        aria-label="Agent tasks"
-        roots={roots}
-        getKey={nodeKey}
-        getLabel={(n) => (n.kind === "group" ? n.group.label : n.task.title)}
-        getChildren={(n) =>
-          n.kind === "group" ? n.group.tasks.map((task) => ({ kind: "task", task }) as Node) : undefined
-        }
-        isExpandable={(n) => n.kind === "group"}
-        expanded={expanded}
-        onExpandedChange={(_next, node, open) =>
-          setCollapsed((c) => {
-            const s = new Set(c);
-            if (open) s.delete(nodeKey(node));
-            else s.add(nodeKey(node));
-            return s;
-          })
-        }
-        selected={selected}
-        onSelectionChange={(sel, lead) => {
-          setSelected(sel);
-          if (sel.size === 1 && lead?.kind === "task" && sel.has(lead.task.id)) openTask(lead.task.id);
-        }}
-        onActivate={(n) => n.kind === "task" && openTask(n.task.id)}
-        onContextMenu={(n, sel, e) => {
-          if (n?.kind !== "task") return;
-          const selection = [...sel].flatMap((id) => {
-            const task = tasks.get(id);
-            return task ? [task] : [];
-          });
-          showContextMenu(e, taskMenu(selection));
-        }}
-        renderNode={(n) =>
-          n.kind === "group" ? (
-            <span className={styles.row}>
-              <span className={styles.groupLabel}>
-                <T>{n.group.label}</T>
-              </span>
-              <span className={styles.count}>{n.group.tasks.length}</span>
+      {docked && (
+        <div className={styles.docked}>
+          <div className={styles.dockedBar}>
+            <span className={styles.dockedTitle} title={dockedTitle ?? undefined}>
+              {dockedTitle}
             </span>
-          ) : (
-            <span className={styles.row} title={n.task.error ?? n.task.title}>
-              <TaskStatusIcon status={n.task.status} />
-              <span className={styles.title} data-unread={unread.has(n.task.id) || undefined}>
-                {n.task.title}
-              </span>
-              {unread.has(n.task.id) && (
-                <span className={styles.unreadDot} role="img" aria-label={tx("Unread")} title={tx("Unread")} />
-              )}
-              {project?.workspace && (
-                <span className={styles.taskProject} title={n.task.projectRoot ?? project.root}>
-                  {basename(n.task.projectRoot ?? project.root)}
-                </span>
-              )}
-              <span className={styles.detail}>
-                {providerName(n.task.provider)}
-                {n.task.isolation === "worktree" ? ` · ${branchLabel(n.task.branch)}` : ""}
-              </span>
-              <span className={styles.age}>{age(n.task.updatedMs ?? 0)}</span>
-            </span>
-          )
-        }
-        empty={
-          <div className={styles.empty}>
-            <T>No agent tasks yet</T>
-            <button type="button" className={styles.link} onClick={() => openHome()}>
-              <T>New Task…</T>
-            </button>
+            <IconButton
+              icon="editor-only"
+              action="agents.undockTask"
+              actionArg={docked}
+              title="Open in Editor"
+              size="small"
+            />
           </div>
-        }
-      />
+          <div className={styles.dockedSession}>
+            <SessionEditor
+              input={{
+                kind: SESSION_KIND,
+                key: sessionKey(docked),
+                data: { task: docked, title: tasks.get(docked)?.title },
+              }}
+            />
+          </div>
+        </div>
+      )}
+      <div className={styles.tasks}>
+        <Tree<Node>
+          aria-label="Agent tasks"
+          roots={roots}
+          getKey={nodeKey}
+          getLabel={(n) => (n.kind === "group" ? n.group.label : n.task.title)}
+          getChildren={(n) =>
+            n.kind === "group" ? n.group.tasks.map((task) => ({ kind: "task", task }) as Node) : undefined
+          }
+          isExpandable={(n) => n.kind === "group"}
+          expanded={expanded}
+          onExpandedChange={(_next, node, open) =>
+            setCollapsed((c) => {
+              const s = new Set(c);
+              if (open) s.delete(nodeKey(node));
+              else s.add(nodeKey(node));
+              return s;
+            })
+          }
+          selected={selected}
+          onSelectionChange={(sel, lead) => {
+            setSelected(sel);
+            if (sel.size === 1 && lead?.kind === "task" && sel.has(lead.task.id)) showTask(lead.task.id);
+          }}
+          onActivate={(n) => n.kind === "task" && showTask(n.task.id)}
+          onContextMenu={(n, sel, e) => {
+            if (n?.kind !== "task") return;
+            const selection = [...sel].flatMap((id) => {
+              const task = tasks.get(id);
+              return task ? [task] : [];
+            });
+            showContextMenu(e, taskMenu(selection));
+          }}
+          renderNode={(n) =>
+            n.kind === "group" ? (
+              <span className={styles.row}>
+                <span className={styles.groupLabel}>
+                  <T>{n.group.label}</T>
+                </span>
+                <span className={styles.count}>{n.group.tasks.length}</span>
+              </span>
+            ) : (
+              <span className={styles.row} title={n.task.error ?? n.task.title}>
+                <TaskStatusIcon status={n.task.status} />
+                <span className={styles.title} data-unread={unread.has(n.task.id) || undefined}>
+                  {n.task.title}
+                </span>
+                {unread.has(n.task.id) && (
+                  <span className={styles.unreadDot} role="img" aria-label={tx("Unread")} title={tx("Unread")} />
+                )}
+                {project?.workspace && (
+                  <span className={styles.taskProject} title={n.task.projectRoot ?? project.root}>
+                    {basename(n.task.projectRoot ?? project.root)}
+                  </span>
+                )}
+                <span className={styles.detail}>
+                  {providerName(n.task.provider)}
+                  {n.task.isolation === "worktree" ? ` · ${branchLabel(n.task.branch)}` : ""}
+                </span>
+                <span className={styles.age}>{age(n.task.updatedMs ?? 0)}</span>
+              </span>
+            )
+          }
+          empty={
+            <div className={styles.empty}>
+              <T>No agent tasks yet</T>
+              <button type="button" className={styles.link} onClick={() => openHome()}>
+                <T>New Task…</T>
+              </button>
+            </div>
+          }
+        />
+      </div>
     </div>
   );
 }

@@ -1692,7 +1692,10 @@ export class EditorController implements SlotHost {
             { kind: "action", action: "project.rename", arg: path, label: "Rename File…" },
             { kind: "separator" },
           ] as MenuItem[])
-        : []),
+        : [
+            // Contributed groups for tabs without a file (e.g. "Open in Tool Window").
+            ...menuGroupItems("editorTab", { paths: [], input: tab.input }),
+          ]),
       { kind: "action", action: "file.settings", arg: "editor.general.editorTabs", label: "Configure Editor Tabs…" },
     ];
   }

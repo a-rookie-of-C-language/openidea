@@ -124,3 +124,42 @@
   align-items: center;
   gap: 5px;
 }
+
+/* A conversation docked in the tool window, above the task list. */
+.docked {
+  flex: 3 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dockedBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.dockedTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.dockedSession {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tasks {
+  flex: 2 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}

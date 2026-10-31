@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { AgentTask } from "@/bindings";
 import { registerActions } from "@/platform/actions";
 import type { EditorInput } from "@/workbench/contributions";
@@ -7,7 +7,7 @@ import { confirmChecked, showError } from "@/workbench/messages";
 import { ContextMenuHost, hideContextMenu } from "@/ui";
 import { AgentsView } from "./AgentsView";
 import { SESSION_KIND } from "./model";
-import { archiveTask, unarchiveTask, deleteTask, openTask, useAgents } from "./store";
+import { archiveTask, unarchiveTask, deleteTask, dockTask, openTask, undockTask, useAgents } from "./store";
 import { taskActions } from "./taskActions";
 
 const editor = vi.hoisted(() => ({
@@ -34,7 +34,11 @@ vi.mock("./store", async (original) => ({
   archiveTask: vi.fn(async () => {}),
   unarchiveTask: vi.fn(async () => {}),
   deleteTask: vi.fn(async () => {}),
+  dockTask: vi.fn(),
+  undockTask: vi.fn(),
 }));
+
+vi.mock("./SessionEditor", () => ({ SessionEditor: () => <div data-testid="docked-session" /> }));
 
 vi.mock("@/workbench/messages", () => ({
   confirmChecked: vi.fn(async () => ({ checked: false })),
@@ -67,7 +71,10 @@ function task(
   };
 }
 
-const row = (id: string) => screen.getByText(id).closest('[role="treeitem"]')!;
+const row = (id: string) =>
+  within(screen.getByRole("tree", { name: "Agent tasks" }))
+    .getByText(id)
+    .closest('[role="treeitem"]')!;
 const select = (id: string, modifiers: MouseEventInit = {}) =>
   fireEvent.mouseDown(row(id), { button: 0, ...modifiers });
 const selectedTasks = () =>
@@ -89,6 +96,7 @@ beforeEach(() => {
     loaded: true,
     error: null,
     tasks: new Map([task("one"), task("two"), task("three"), task("four")].map((t) => [t.id, t])),
+    docked: null,
   });
   dispose = registerActions(taskActions);
 });
@@ -139,6 +147,34 @@ describe("Agents selection", () => {
     select("three", { [modifier]: true });
     expect(selectedTasks()).toEqual(["one"]);
     expect(openTask).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Agents docked view", () => {
+  it("shows the docked conversation above the list and switches it by selecting a task", () => {
+    useAgents.setState({ docked: "one" });
+    setup();
+    expect(screen.getByTestId("docked-session")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open in Editor" })).toBeTruthy();
+    expect(openTask).not.toHaveBeenCalled();
+    select("two");
+    expect(dockTask).toHaveBeenCalledWith("two");
+    expect(openTask).not.toHaveBeenCalled();
+  });
+
+  it("undocks from the docked conversation's bar", () => {
+    useAgents.setState({ docked: "one" });
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Open in Editor" }));
+    expect(undockTask).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens tabs as usual without a docked conversation", () => {
+    setup();
+    expect(screen.queryByRole("button", { name: "Open in Editor" })).toBeNull();
+    select("two");
+    expect(openTask).toHaveBeenCalledWith("two");
+    expect(dockTask).not.toHaveBeenCalled();
   });
 });
 
@@ -219,5 +255,22 @@ describe("Agents bulk actions", () => {
     await taskActions.find((action) => action.id === "agents.deleteTasks")!.run({ ctx: {}, arg: ["one", "two"] });
     expect(deleteTask).toHaveBeenCalledTimes(2);
     expect(showError).toHaveBeenCalledWith("Cannot delete agent tasks", "one: Cannot remove worktree");
+  });
+});
+
+describe("Agents task menu", () => {
+  it("offers to dock a task into the tool window", async () => {
+    setup();
+    context("one");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open in Tool Window" }));
+    await waitFor(() => expect(dockTask).toHaveBeenCalledWith("one"));
+  });
+
+  it("offers to move the docked task back to an editor", async () => {
+    useAgents.setState({ docked: "one" });
+    setup();
+    context("one");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open in Editor" }));
+    await waitFor(() => expect(undockTask).toHaveBeenCalledTimes(1));
   });
 });
