@@ -355,6 +355,12 @@ export const intellijWindows: Record<string, string[]> = {
   "db.newDataSource": [],
   "db.new": ["Alt+Insert"],
   "services.addService": ["Alt+Insert"],
+  // Pull Requests tool window (Create in its title bar, Refresh per tab) and the review's viewed toggle.
+  "github.createPullRequest": ["Alt+Insert"],
+  "github.refresh": ["Ctrl+F5"],
+  "github.pullRequest.refresh": ["Ctrl+F5"],
+  "github.pullRequest.timeline.refresh": ["Ctrl+F5"],
+  "github.pullRequest.toggleViewed": ["Ctrl+Shift+S"],
   "db.properties": ["Shift+Enter"],
   "db.refresh": ["Ctrl+F5"],
   "db.disconnect": ["Ctrl+F2"],
@@ -388,6 +394,7 @@ export const intellijWindows: Record<string, string[]> = {
   "find.popup.openResult": ["F4"],
   "find.popup.recentSearches": ["Alt+Down"],
   // Search fields (find bar, Find in Files): last, so they win over editor keys while one is focused.
+  "find.openInWindow": ["Alt+F7"],
   "find.field.newLine": ["Ctrl+Shift+Enter"],
   "find.field.recentSearches": ["Alt+Down"],
 };

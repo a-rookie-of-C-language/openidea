@@ -357,6 +357,12 @@ export const intellijMacos: Record<string, string[]> = {
   "db.newDataSource": [],
   "db.new": ["Meta+N"],
   "services.addService": ["Meta+N"],
+  // Pull Requests tool window (Create in its title bar, Refresh per tab) and the review's viewed toggle.
+  "github.createPullRequest": ["Meta+N"],
+  "github.refresh": ["Meta+R"],
+  "github.pullRequest.refresh": ["Meta+R"],
+  "github.pullRequest.timeline.refresh": ["Meta+R"],
+  "github.pullRequest.toggleViewed": ["Meta+Shift+S"],
   "db.properties": ["Shift+Enter"],
   "db.refresh": ["Meta+R"],
   "db.disconnect": ["Meta+F2"],
@@ -390,6 +396,7 @@ export const intellijMacos: Record<string, string[]> = {
   "find.popup.openResult": ["F4", "Meta+Down"],
   "find.popup.recentSearches": ["Alt+Down"],
   // Search fields (find bar, Find in Files): last, so they win over editor keys while one is focused.
+  "find.openInWindow": ["Alt+F7"],
   "find.field.newLine": ["Meta+Shift+Enter"],
   "find.field.recentSearches": ["Alt+Down"],
 };

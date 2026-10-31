@@ -11,7 +11,7 @@ import { onIdeEvent } from "@/platform/ipc";
 import { useProject } from "@/platform/project";
 import { EDIT_SCOPES_ACTION } from "@/platform/search";
 import { isVirtualUri } from "@/platform/virtualDocs";
-import { registerMenuGroup, registerOverlay, registerToolWindow } from "@/workbench/contributions";
+import { provideFindResults, registerMenuGroup, registerOverlay, registerToolWindow } from "@/workbench/contributions";
 import { currentModel, useProjectTree } from "../project-tree/store";
 import { BookmarkPopupsOverlay } from "./bookmarks/BookmarkPopups";
 import { bookmarkGutter } from "./bookmarks/gutter";
@@ -39,7 +39,7 @@ import { hideSearchEverywhere, showSearchEverywhere } from "./everywhere/store";
 import { FindInFilesOverlay } from "./find/FindInFiles";
 import { ScopesDialogOverlay, showScopesDialog } from "./find/ScopesDialog";
 import { hideFindPopup, parseFindArg, runFindPopupCommand, showFindPopup, useFindPopup } from "./find/store";
-import { disposeFindWindow, rerunActiveFindTab, useFindHeaderMenu } from "./find/windowStore";
+import { disposeFindWindow, openEditorResults, rerunActiveFindTab, useFindHeaderMenu } from "./find/windowStore";
 import { RecentPopupsOverlay } from "./recent/RecentPopups";
 import { cycleSwitcher, hideRecentPopup, showRecentPopup } from "./recent/store";
 import { FileStructureOverlay, useFileStructurePopup } from "./structure/StructureView";
@@ -142,6 +142,7 @@ export function activate(): void | (() => void) {
 
   const disposers: Array<() => void> = [
     installTracking(),
+    provideFindResults(openEditorResults),
 
     registerOverlay({ id: "search.everywhere", component: SearchEverywhereOverlay }),
     registerOverlay({ id: "search.recent", component: RecentPopupsOverlay }),

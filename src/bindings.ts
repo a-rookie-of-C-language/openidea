@@ -151,6 +151,7 @@ export const commands = {
 	 *  `charset` (writes the BOM for `utf-8-bom` / UTF-16).
 	 */
 	fsCreateFile: (path: string) => typedError<null, IdeError>(__TAURI_INVOKE("fs_create_file", { path })),
+	fsCreateFileBytes: (path: string, data: number[]) => typedError<null, IdeError>(__TAURI_INVOKE("fs_create_file_bytes", { path, data })),
 	fsCreateDir: (path: string) => typedError<null, IdeError>(__TAURI_INVOKE("fs_create_dir", { path })),
 	fsRename: (from: string, to: string) => typedError<null, IdeError>(__TAURI_INVOKE("fs_rename", { from, to })),
 	/**
@@ -225,6 +226,7 @@ export const commands = {
 	 *  Large documents fall back to word / line / document ranges.
 	 */
 	docSelectionRanges: (doc: DocId, offset: number) => typedError<Range[], IdeError>(__TAURI_INVOKE("doc_selection_ranges", { doc, offset })),
+	jvmFilePresentations: (paths: string[]) => typedError<JvmFilePresentation[], IdeError>(__TAURI_INVOKE("jvm_file_presentations", { paths })),
 	/**
 	 *  What the structure service supports for a language (`tree`: every query,
 	 *  `locals`: scope analysis).
@@ -503,6 +505,8 @@ export const commands = {
 	vcsDiffWithWorktree: (repo: string | null, rev: string) => typedError<ChangedFile[], IdeError>(__TAURI_INVOKE("vcs_diff_with_worktree", { repo, rev })),
 	/**  Files that differ between two revisions (the "N files updated" of Update Project). */
 	vcsDiffRevisions: (repo: string | null, from: string, to: string) => typedError<ChangedFile[], IdeError>(__TAURI_INVOKE("vcs_diff_revisions", { repo, from, to })),
+	/**  The best common ancestor of `a` and `b` (`git merge-base`), if any. */
+	vcsMergeBase: (repo: string | null, a: string, b: string) => typedError<string | null, IdeError>(__TAURI_INVOKE("vcs_merge_base", { repo, a, b })),
 	vcsCreatePatch: (repo: string | null, source: PatchSource) => typedError<string, IdeError>(__TAURI_INVOKE("vcs_create_patch", { repo, source })),
 	vcsPatchPreview: (repo: string | null, patch: string) => typedError<PatchFile[], IdeError>(__TAURI_INVOKE("vcs_patch_preview", { repo, patch })),
 	vcsApplyPatch: (repo: string | null, patch: string) => typedError<ApplyOutcome, IdeError>(__TAURI_INVOKE("vcs_apply_patch", { repo, patch })),
@@ -513,10 +517,12 @@ export const commands = {
 	 *  Unshelve: applies the shelved patch (3-way merging; conflicts are left for the
 	 *  merge UI); with `remove`, deletes it from the shelf.
 	 */
-	vcsUnshelve: (id: string, remove: boolean) => typedError<ApplyOutcome, IdeError>(__TAURI_INVOKE("vcs_unshelve", { id, remove })),
-	vcsShelfDelete: (id: string) => typedError<null, IdeError>(__TAURI_INVOKE("vcs_shelf_delete", { id })),
+	vcsUnshelve: (id: string, remove: boolean, path: string | null) => typedError<ApplyOutcome, IdeError>(__TAURI_INVOKE("vcs_unshelve", { id, remove, path })),
+	vcsShelfDelete: (id: string, path: string | null) => typedError<null, IdeError>(__TAURI_INVOKE("vcs_shelf_delete", { id, path })),
 	vcsShelfRename: (id: string, name: string) => typedError<null, IdeError>(__TAURI_INVOKE("vcs_shelf_rename", { id, name })),
-	vcsShelfPatch: (id: string) => typedError<string, IdeError>(__TAURI_INVOKE("vcs_shelf_patch", { id })),
+	vcsShelfPatch: (id: string, path: string | null) => typedError<string, IdeError>(__TAURI_INVOKE("vcs_shelf_patch", { id, path })),
+	vcsShelfDiff: (id: string) => typedError<ShelfDiffFile[], IdeError>(__TAURI_INVOKE("vcs_shelf_diff", { id })),
+	vcsShelfImport: (name: string, patch: string) => typedError<null, IdeError>(__TAURI_INVOKE("vcs_shelf_import", { name, patch })),
 	vcsChangelistsLoad: () => typedError<ChangelistState, IdeError>(__TAURI_INVOKE("vcs_changelists_load")),
 	vcsChangelistsSave: (changelists: ChangelistState) => typedError<null, IdeError>(__TAURI_INVOKE("vcs_changelists_save", { changelists })),
 	/**  Create Patch › Save to file. */
@@ -897,6 +903,8 @@ export const commands = {
 	 */
 	dockerRunEnv: (endpoint: DockerEndpoint) => typedError<{ [key in string]: string }, IdeError>(__TAURI_INVOKE("docker_run_env", { endpoint })),
 	ghAvailability: () => typedError<GhAvailability, IdeError>(__TAURI_INVOKE("gh_availability")),
+	/**  A GitHub GraphQL / REST call through `gh api`; returns the response body. */
+	ghApi: (request: GhApiRequest) => typedError<string, IdeError>(__TAURI_INVOKE("gh_api", { request })),
 	ghPrList: (query: PrListQuery) => typedError<PullRequestSummary[], IdeError>(__TAURI_INVOKE("gh_pr_list", { query })),
 	ghPrView: (number: number) => typedError<PullRequestDetails, IdeError>(__TAURI_INVOKE("gh_pr_view", { number })),
 	ghPrReviewComments: (number: number) => typedError<PrReviewComment[], IdeError>(__TAURI_INVOKE("gh_pr_review_comments", { number })),
@@ -960,33 +968,26 @@ export const commands = {
 	 *  (run in a terminal tab, so prompts and host-key questions are answered there).
 	 */
 	sshTerminalCommand: (id: string) => typedError<SshTerminalCommand, IdeError>(__TAURI_INVOKE("ssh_terminal_command", { id })),
-	/**  Tools › Deployment › Upload to…: files and folders to `server` (default server when `None`). */
 	deployUpload: (paths: IpcPath[], server: string | null, request: RequestId) => typedError<TransferReport, IdeError>(__TAURI_INVOKE("deploy_upload", { paths, server, request })),
-	/**  Download from…: the remote counterparts of files and folders. */
 	deployDownload: (paths: IpcPath[], server: string | null, request: RequestId) => typedError<TransferReport, IdeError>(__TAURI_INVOKE("deploy_download", { paths, server, request })),
-	/**  Deletes the remote counterparts of files and folders. */
 	deployDeleteRemote: (paths: IpcPath[], server: string | null) => typedError<TransferReport, IdeError>(__TAURI_INVOKE("deploy_delete_remote", { paths, server })),
-	/**  Sync with Deployed: local and remote files under `path`, side by side. */
 	deployCompare: (path: IpcPath, server: string | null, request: RequestId) => typedError<SyncEntry[], IdeError>(__TAURI_INVOKE("deploy_compare", { path, server, request })),
-	/**  Applies the Sync with Deployed choices. */
 	deploySync: (steps: SyncStep[], server: string | null, request: RequestId) => typedError<TransferReport, IdeError>(__TAURI_INVOKE("deploy_sync", { steps, server, request })),
-	/**  Where `path` is deployed (remote path, web URL); `None` when not mapped. */
 	deployInfo: (path: IpcPath, server: string | null) => typedError<{
 	server: string,
 	remotePath: string,
 	webUrl: string | null,
 } | null, IdeError>(__TAURI_INVOKE("deploy_info", { path, server })),
-	/**  Remote Host tool window: the server root of `server`, resolved on the host. */
 	deployServerRoot: (server: string) => typedError<string, IdeError>(__TAURI_INVOKE("deploy_server_root", { server })),
-	/**  Entries of a remote folder of SSH configuration `ssh` (`~`: the login directory). */
-	remoteList: (ssh: string, path: string) => typedError<RemoteEntry[], IdeError>(__TAURI_INVOKE("remote_list", { ssh, path })),
-	/**  Opens a remote file for editing: a local copy, uploaded back on save. */
-	remoteOpen: (ssh: string, path: string) => typedError<IpcPath, IdeError>(__TAURI_INVOKE("remote_open", { ssh, path })),
-	/**  The remote file a local copy stands for: (SSH configuration id, remote path). */
-	remoteOf: (path: IpcPath) => __TAURI_INVOKE<[string, string] | null>("remote_of", { path }),
-	remoteDelete: (ssh: string, path: string) => typedError<null, IdeError>(__TAURI_INVOKE("remote_delete", { ssh, path })),
-	remoteMkdir: (ssh: string, path: string) => typedError<null, IdeError>(__TAURI_INVOKE("remote_mkdir", { ssh, path })),
-	remoteRename: (ssh: string, from: string, to: string) => typedError<null, IdeError>(__TAURI_INVOKE("remote_rename", { ssh, from, to })),
+	remoteList: (connection: FsConnection, path: string) => typedError<RemoteEntry[], IdeError>(__TAURI_INVOKE("remote_list", { connection, path })),
+	deployTestConnection: (connection: FsConnection, path: string) => typedError<null, IdeError>(__TAURI_INVOKE("deploy_test_connection", { connection, path })),
+	remoteOpen: (connection: FsConnection, path: string) => typedError<IpcPath, IdeError>(__TAURI_INVOKE("remote_open", { connection, path })),
+	remoteOf: (path: IpcPath) => __TAURI_INVOKE<[FsConnection, string] | null>("remote_of", { path }),
+	remoteDelete: (connection: FsConnection, path: string) => typedError<null, IdeError>(__TAURI_INVOKE("remote_delete", { connection, path })),
+	remoteMkdir: (connection: FsConnection, path: string) => typedError<null, IdeError>(__TAURI_INVOKE("remote_mkdir", { connection, path })),
+	remoteRename: (connection: FsConnection, from: string, to: string) => typedError<null, IdeError>(__TAURI_INVOKE("remote_rename", { connection, from, to })),
+	/**  Browse before connecting, using the desktop's SSH configuration even in a remote window. */
+	remoteBootstrapList: (ssh: string, path: string) => typedError<RemoteEntry[], IdeError>(__TAURI_INVOKE("remote_bootstrap_list", { ssh, path })),
 	/**
 	 *  File › Remote Development: opens `path` on the host of SSH configuration
 	 *  `ssh_config` in this window (installs / starts the server as needed).
@@ -1986,6 +1987,23 @@ export type CreatePullRequest = {
 	push: boolean,
 };
 
+/**  Imported editor colour scheme on top of a built-in base. */
+export type CustomColorScheme = CustomColorScheme_Serialize | CustomColorScheme_Deserialize;
+
+/**  Imported editor colour scheme on top of a built-in base. */
+export type CustomColorScheme_Deserialize = {
+	name: string,
+	parent: string,
+	attributes: { [key in string]: TextAttributesOverride_Deserialize },
+};
+
+/**  Imported editor colour scheme on top of a built-in base. */
+export type CustomColorScheme_Serialize = {
+	name: string,
+	parent: string,
+	attributes: { [key in string]: TextAttributesOverride_Serialize },
+};
+
 /**  A named profile made with Copy. */
 export type CustomInspectionProfile = {
 	name?: string,
@@ -2387,8 +2405,9 @@ export type DeploymentMapping = {
 	web?: string,
 };
 
-/**  An SFTP server and how project folders map onto it. */
+/**  A deployment filesystem and how project folders map onto it. */
 export type DeploymentServer = {
+	kind?: DeploymentType,
 	id?: string,
 	name?: string,
 	/**  [`SshConfiguration::id`]. */
@@ -2415,6 +2434,8 @@ export type DeploymentSettings = {
 	/**  File names never uploaded or downloaded (`*` and `?` wildcards; `;`-separated in the UI). */
 	exclude?: string[],
 };
+
+export type DeploymentType = "sftp" | "local";
 
 export type Diagnostic = {
 	range: Range,
@@ -2696,6 +2717,8 @@ export type EditorConfigProps = {
 export type EditorGeneralSettings = {
 	/**  Change font size with ⌘ + mouse wheel. */
 	wheelZoom?: boolean,
+	markdownImageFolder?: string,
+	markdownImageNamePattern?: string,
 	/**  Drag-and-drop of selected text inside the editor. */
 	dragAndDrop?: boolean,
 	/**  When the caret moves out of view: `minimize` scrolling | `center` the caret line. */
@@ -2730,6 +2753,8 @@ export type EditorSettings_Deserialize = {
 	formatOnSave?: boolean,
 	/**  Editor colour scheme id; `theme-default` follows the IDE theme. */
 	colorScheme?: string,
+	/**  Imported editor schemes, stored in user settings. */
+	customSchemes?: { [key in string]: CustomColorScheme_Deserialize },
 	/**  Color Scheme edits: scheme id → attribute id → override. */
 	colorOverrides?: { [key in string]: { [key in string]: TextAttributesOverride_Deserialize } },
 	/**
@@ -2777,6 +2802,8 @@ export type EditorSettings_Serialize = {
 	formatOnSave: boolean,
 	/**  Editor colour scheme id; `theme-default` follows the IDE theme. */
 	colorScheme: string,
+	/**  Imported editor schemes, stored in user settings. */
+	customSchemes: { [key in string]: CustomColorScheme_Serialize },
 	/**  Color Scheme edits: scheme id → attribute id → override. */
 	colorOverrides: { [key in string]: { [key in string]: TextAttributesOverride_Serialize } },
 	/**
@@ -3089,6 +3116,8 @@ export type Fragment = {
 	text: string,
 };
 
+export type FsConnection = { kind: "sftp"; ssh: string } | { kind: "local" };
+
 /**
  *  A method breakpoint (DAP function breakpoint). `name` uses the adapter's syntax:
  *  `pkg.Class#method` for java-debug, `pkg.Func` / `pkg.(*T).Method` for Delve, a plain
@@ -3121,6 +3150,21 @@ export type GeneralSettings = {
 	projectName?: string,
 };
 
+/**
+ *  A GitHub API call through `gh api`: GraphQL (`endpoint` `graphql`, `body`
+ *  `{"query", "variables"}`) or REST (`repos/{owner}/{repo}/…`, gh fills in the
+ *  placeholders from the project's remote).
+ */
+export type GhApiRequest = {
+	/**  `GET`, `POST`, `PATCH`, `PUT`, `DELETE`. */
+	method: string,
+	endpoint: string,
+	/**  JSON request body, sent on stdin. */
+	body: string | null,
+	/**  Follow REST `Link` pages; the result is the array of all pages (`--slurp`). */
+	paginate: boolean,
+};
+
 /**  Whether pull requests can be shown for the project, and why not. */
 export type GhAvailability = { kind: "ready"; repo: GhRepo; 
 /**  The signed-in user. */
@@ -3137,6 +3181,12 @@ export type GhRepo = {
 	nameWithOwner: string,
 	url: string,
 	defaultBranch: string | null,
+	/**  Merge methods the repository allows (all of them when gh does not say). */
+	mergeCommitAllowed: boolean,
+	squashMergeAllowed: boolean,
+	rebaseMergeAllowed: boolean,
+	/**  The signed-in user's permission: `ADMIN`, `MAINTAIN`, `WRITE`, `TRIAGE`, `READ`; empty when unknown. */
+	viewerPermission: string,
 };
 
 export type GitExecutableInfo = {
@@ -3651,6 +3701,8 @@ export type JavaLaunchInfo = {
 	projectRoot: IpcPath | null,
 	classPaths: string[],
 	modulePaths: string[],
+	/**  Path list separator of the host that runs the JVM. */
+	pathListSeparator: string,
 	/**  JDK home jdtls compiles the project against. */
 	javaHome: IpcPath | null,
 	/**  The `java` launcher to use (filled in by the caller from the installed JDKs). */
@@ -3706,6 +3758,19 @@ export type JdkVendor = {
 	id: string,
 	name: string,
 };
+
+export type JvmFilePresentation = {
+	path: string,
+	presentation: JvmPresentation,
+};
+
+export type JvmPresentation = {
+	kind: JvmTypeKind | null,
+	springBoot: boolean,
+	runnable: boolean,
+};
+
+export type JvmTypeKind = "class" | "abstractClass" | "interface" | "enum" | "record" | "annotation" | "exception" | "object";
 
 /**  Editor › Code Style › <Language> › Tabs and Indents (unset fields inherit). */
 export type LanguageCodeStyle = LanguageCodeStyle_Serialize | LanguageCodeStyle_Deserialize;
@@ -4745,6 +4810,8 @@ export type PullRequestDetails = {
 	baseOid: string,
 	/**  `MERGEABLE`, `CONFLICTING`, `UNKNOWN`. */
 	mergeable: string,
+	/**  GitHub's merge box state: `CLEAN`, `UNSTABLE`, `HAS_HOOKS`, `BLOCKED`, `BEHIND`, `DIRTY`, `DRAFT`, `UNKNOWN`. */
+	mergeStateStatus: string,
 	isCrossRepository: boolean,
 	mergedAt: string | null,
 	closedAt: string | null,
@@ -5464,6 +5531,13 @@ export type Settings_Serialize = {
 };
 
 export type Severity = "error" | "warning" | "info" | "hint";
+
+export type ShelfDiffFile = {
+	path: string,
+	patch: string,
+	before: string | null,
+	after: string | null,
+};
 
 /**  Version Control › Shelf. */
 export type ShelfSettings = {

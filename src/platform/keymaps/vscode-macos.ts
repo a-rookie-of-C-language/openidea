@@ -347,6 +347,11 @@ export const vscodeMacos: Record<string, string[]> = {
   "db.newDataSource": [],
   "db.new": [],
   "services.addService": [],
+  "github.createPullRequest": [],
+  "github.refresh": [],
+  "github.pullRequest.refresh": [],
+  "github.pullRequest.timeline.refresh": [],
+  "github.pullRequest.toggleViewed": [],
   "db.properties": [],
   "db.refresh": [],
   "db.disconnect": [],
@@ -378,6 +383,7 @@ export const vscodeMacos: Record<string, string[]> = {
   "agents.showToolWindow": [],
   "agents.sendToAgent": [],
   // Search fields (find bar, Find in Files): last, so they win over editor keys while one is focused.
+  "find.openInWindow": ["Alt+F7"],
   "find.field.newLine": ["Meta+Shift+Enter"],
   "find.field.recentSearches": ["Alt+Down"],
 };
