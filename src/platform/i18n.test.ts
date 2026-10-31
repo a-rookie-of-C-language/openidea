@@ -164,10 +164,31 @@ describe("t / locales", () => {
 describe("catalogs", () => {
   const catalogs: Record<string, Record<string, string>> = { en, zh };
 
+  /**
+   * Source strings that are not prose and are shown verbatim in every locale —
+   * Go toolchain identifiers (env vars, build experiments) and placeholder
+   * examples. They are kept out of `text/zh.json`'s "must differ" rule below.
+   */
+  const untranslated = new Set([
+    "CGO",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GONOPROXY",
+    "GONOSUMDB",
+    "GOPRIVATE",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOWORK",
+    "go1.22",
+    "integration debug",
+    "loopvar,rangefunc",
+  ]);
+
   it("translate source text into non-empty, different text", () => {
     for (const [source, text] of Object.entries(zhText as Record<string, string>)) {
       expect(text.trim(), source).not.toBe("");
-      expect(text, source).not.toBe(source);
+      if (!untranslated.has(source)) expect(text, source).not.toBe(source);
     }
   });
 
