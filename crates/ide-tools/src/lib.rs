@@ -151,11 +151,13 @@ fn managed_bin_dir(root: &Path, spec: &ToolSpec, platform: Platform) -> Option<P
 }
 
 /// Prepends [`tools_bin_dirs`] to this process's `PATH` so language servers,
-/// debug adapters and terminals find managed tools. Call once at startup,
-/// before other threads start (it mutates the process environment).
+/// debug adapters and terminals find managed tools, and appends the Windows user
+/// `PATH` entries a process may not inherit, for agent detection and for what the
+/// tools found there run in turn. Call once at startup, before other threads start
+/// (it mutates the process environment).
 pub fn extend_process_path(app_data: &Path) {
     let current = std::env::var_os("PATH").unwrap_or_default();
-    let extended = path_with_tools(app_data, &current);
+    let extended = path_with_tools(app_data, &ide_core::process::with_user_path(&current));
     if extended != current {
         // SAFETY: documented to run at startup before any other thread reads the environment.
         unsafe { std::env::set_var("PATH", extended) };

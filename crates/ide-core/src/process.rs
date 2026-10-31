@@ -304,6 +304,21 @@ pub fn user_path() -> Option<OsString> {
     None
 }
 
+/// `path` followed by the [`user_path`] entries it lacks.
+pub fn with_user_path(path: &OsStr) -> OsString {
+    user_path().map_or_else(|| path.to_owned(), |user| append_path_entries(path, &user))
+}
+
+fn append_path_entries(path: &OsStr, extra: &OsStr) -> OsString {
+    let mut dirs: Vec<std::path::PathBuf> = std::env::split_paths(path).filter(|d| !d.as_os_str().is_empty()).collect();
+    for dir in std::env::split_paths(extra).filter(|d| !d.as_os_str().is_empty()) {
+        if !dirs.contains(&dir) {
+            dirs.push(dir);
+        }
+    }
+    std::env::join_paths(dirs).unwrap_or_else(|_| path.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,6 +332,13 @@ mod tests {
             let dirs: Vec<_> = std::env::split_paths(&path).collect();
             assert!(!dirs.is_empty(), "user PATH should hold at least one directory");
         }
+    }
+
+    #[test]
+    fn append_path_entries_keeps_the_order_and_adds_what_is_missing() {
+        let join = |dirs: &[&str]| std::env::join_paths(dirs).unwrap();
+        assert_eq!(append_path_entries(&join(&["a", "b"]), &join(&["b", "c"])), join(&["a", "b", "c"]));
+        assert_eq!(append_path_entries(OsStr::new(""), &join(&["c"])), join(&["c"]));
     }
 
     #[test]
