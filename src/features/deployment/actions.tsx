@@ -10,7 +10,7 @@ import { workflowSettings } from "@/platform/workflowSettings";
 import { notifications, projectViewSelection, toolWindowService } from "@/workbench/contributions";
 import { chooseItem } from "@/workbench/inputDialogs";
 import { confirm } from "@/workbench/messages";
-import { initialSyncChoices, resolveServer, serverLabel, summarizeReport, targetPaths } from "./model";
+import { initialSyncChoices, mappedLocally, resolveServer, serverLabel, summarizeReport, targetPaths } from "./model";
 import { withSsh } from "./ssh";
 import { REMOTE_HOST_WINDOW, patchSync, useDeployment } from "./store";
 import styles from "./Deployment.module.css";
@@ -51,22 +51,57 @@ function notifyNoTargets() {
   });
 }
 
-/** Asks which server to use (the only one without asking). */
-async function pickServer(title: string): Promise<DeploymentServerValid | null> {
+function notifyUnmapped() {
+  notifications().notify({
+    level: "warning",
+    title: "No deployment server maps the selected files",
+    group: GROUP,
+    key: "deployment.unmapped",
+    actions: [{ label: "Configure…", run: () => void executeAction("deployment.configure") }],
+  });
+}
+
+/**
+ * Asks which server to use (the only one without asking). With `paths` and a
+ * `root`, only offers servers whose mappings cover every path — an upload to a
+ * server that does not map a file is skipped by the backend.
+ */
+async function pickServer(
+  title: string,
+  paths?: readonly string[],
+  root?: string | null,
+): Promise<DeploymentServerValid | null> {
   const servers = deployment().servers;
   if (!servers.length) {
     notifyNoServers();
     return null;
   }
-  if (servers.length === 1) return servers[0]!;
-  const labels = servers.map(serverLabel);
+  const usable = paths?.length && root ? servers.filter((s) => paths.every((p) => mappedLocally(p, s, root))) : servers;
+  if (!usable.length) {
+    notifyUnmapped();
+    return null;
+  }
+  if (usable.length === 1) return usable[0]!;
+  const labels = usable.map(serverLabel);
   const picked = await chooseItem({ title, items: labels });
-  return picked === null ? null : (servers[labels.indexOf(picked)] ?? null);
+  return picked === null ? null : (usable[labels.indexOf(picked)] ?? null);
 }
 
-/** The default server; asks when none is marked default and there are several. */
-async function defaultServer(title: string): Promise<DeploymentServerValid | null> {
-  return resolveServer(deployment(), null) ?? pickServer(title);
+/**
+ * The default server; asks when none is marked default, there are several, or
+ * the default does not map `paths` under `root` (an upload there would be
+ * skipped by the backend).
+ */
+async function defaultServer(
+  title: string,
+  paths?: readonly string[],
+  root?: string | null,
+): Promise<DeploymentServerValid | null> {
+  const resolved = resolveServer(deployment(), null);
+  if (resolved && (!paths?.length || !root || paths.every((p) => mappedLocally(p, resolved, root)))) {
+    return resolved;
+  }
+  return pickServer(title, paths, root);
 }
 
 function ReportBody({ report }: { report: TransferReport }) {
@@ -139,7 +174,7 @@ export function downloadPaths(server: DeploymentServerValid, paths: string[]) {
 }
 
 async function deleteRemote(paths: string[]) {
-  const server = await defaultServer("Delete from Server");
+  const server = await defaultServer("Delete from Server", paths, projectRoot());
   if (!server) return;
   const root = projectRoot();
   const names = paths.map((p) => (root ? relativePath(root, p) || "/" : p));
@@ -275,7 +310,9 @@ export function registerDeploymentActions(): () => void {
       icon: "export",
       when,
       keywords: ["deploy", "sftp", "upload", "remote"],
-      run: withTargets(async (paths) => transfer("upload", await defaultServer("Upload to"), paths)),
+      run: withTargets(async (paths) =>
+        transfer("upload", await defaultServer("Upload to", paths, projectRoot()), paths),
+      ),
     },
     {
       id: "deployment.uploadTo",
@@ -284,7 +321,7 @@ export function registerDeploymentActions(): () => void {
       category: CATEGORY,
       when,
       keywords: ["deploy", "sftp", "upload", "remote"],
-      run: withTargets(async (paths) => transfer("upload", await pickServer("Upload to"), paths)),
+      run: withTargets(async (paths) => transfer("upload", await pickServer("Upload to", paths, projectRoot()), paths)),
     },
     {
       id: "deployment.downloadFromDefault",
@@ -293,7 +330,9 @@ export function registerDeploymentActions(): () => void {
       category: CATEGORY,
       when,
       keywords: ["deploy", "sftp", "download", "remote"],
-      run: withTargets(async (paths) => transfer("download", await defaultServer("Download from"), paths)),
+      run: withTargets(async (paths) =>
+        transfer("download", await defaultServer("Download from", paths, projectRoot()), paths),
+      ),
     },
     {
       id: "deployment.downloadFrom",
@@ -302,7 +341,9 @@ export function registerDeploymentActions(): () => void {
       category: CATEGORY,
       when,
       keywords: ["deploy", "sftp", "download", "remote"],
-      run: withTargets(async (paths) => transfer("download", await pickServer("Download from"), paths)),
+      run: withTargets(async (paths) =>
+        transfer("download", await pickServer("Download from", paths, projectRoot()), paths),
+      ),
     },
     {
       id: "deployment.syncWith",
@@ -313,9 +354,10 @@ export function registerDeploymentActions(): () => void {
       keywords: ["deploy", "sftp", "compare", "synchronize", "remote", "diff"],
       run: ({ arg }) => {
         const paths = actionTargets(arg);
-        const target = paths[0] ?? projectRoot();
+        const root = projectRoot();
+        const target = paths[0] ?? root;
         if (!target) return;
-        void pickServer("Sync with Deployed to").then((server) => server && openSync(server, target));
+        void pickServer("Sync with Deployed to", [target], root).then((server) => server && openSync(server, target));
       },
     },
     {

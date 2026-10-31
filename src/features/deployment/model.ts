@@ -130,6 +130,26 @@ export function remoteName(path: string): string {
 }
 
 /**
+ * Whether `path` (absolute, forward-slash separated, inside `projectRoot`) falls
+ * under one of the server's mappings — mirroring `Mappings::remote` in
+ * `ide-remote`. A server with no mappings covers the project root.
+ */
+export function mappedLocally(
+  path: string,
+  server: Pick<DeploymentServerValid, "mappings">,
+  projectRoot: string,
+): boolean {
+  const root = projectRoot.replace(/\/+$/, "");
+  if (path !== root && !path.startsWith(`${root}/`)) return false;
+  if (!server.mappings.length) return true;
+  return server.mappings.some((m) => {
+    const local = m.local.trim().replace(/^\/+|\/+$/g, "");
+    const base = local ? `${root}/${local}` : root;
+    return path === base || path.startsWith(`${base}/`);
+  });
+}
+
+/**
  * The local project path a remote path is deployed from, through the server's
  * mappings (the most specific deployment path wins); null when not mapped.
  * `root` is the server's root path as resolved on the host.

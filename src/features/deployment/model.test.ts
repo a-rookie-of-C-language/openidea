@@ -6,6 +6,7 @@ import {
   initialSyncChoices,
   joinRemote,
   localPathForRemote,
+  mappedLocally,
   pathsFromArg,
   remoteName,
   remoteParent,
@@ -151,5 +152,22 @@ describe("remote paths", () => {
     expect(map("/opt/shared/lib")).toBe(`${ROOT}/shared/lib`);
     expect(map("/var/wwwx/a")).toBeNull();
     expect(map("/etc/passwd")).toBeNull();
+  });
+
+  it("tells whether a local path falls under a server's mappings", () => {
+    const mapped = (p: string, local: string[]) =>
+      mappedLocally(p, { mappings: local.map((l) => ({ local: l, deployment: "", web: "" })) }, ROOT);
+    // A server with no mappings covers the whole project.
+    expect(mappedLocally(`${ROOT}/a`, { mappings: [] }, ROOT)).toBe(true);
+    // Mappings gate what the server takes.
+    expect(mapped(`${ROOT}/public/x.css`, ["public"])).toBe(true);
+    expect(mapped(`${ROOT}/public`, ["public"])).toBe(true);
+    expect(mapped(`${ROOT}/src/x.php`, ["public"])).toBe(false);
+    expect(mapped(`${ROOT}/src/x.php`, ["", "public"])).toBe(true);
+    expect(mapped(`${ROOT}/publish/x`, ["public"])).toBe(false);
+    // Outside the project is never mapped.
+    expect(mapped("/elsewhere/x", [""])).toBe(false);
+    // Sloppy mapping entries still match.
+    expect(mapped(`${ROOT}/public/x`, [" /public/ "])).toBe(true);
   });
 });
