@@ -10,7 +10,7 @@ import { workflowSettings } from "@/platform/workflowSettings";
 import { notifications, projectViewSelection, toolWindowService } from "@/workbench/contributions";
 import { chooseItem } from "@/workbench/inputDialogs";
 import { confirm } from "@/workbench/messages";
-import { initialSyncChoices, resolveServer, serverLabel, summarizeReport, targetPaths } from "./model";
+import { initialSyncChoices, resolveServer, serverCovers, serverLabel, summarizeReport, targetPaths } from "./model";
 import { withSsh } from "./ssh";
 import { REMOTE_HOST_WINDOW, patchSync, useDeployment } from "./store";
 import styles from "./Deployment.module.css";
@@ -51,9 +51,10 @@ function notifyNoTargets() {
   });
 }
 
-/** Asks which server to use (the only one without asking). */
-async function pickServer(title: string): Promise<DeploymentServerValid | null> {
-  const servers = deployment().servers;
+/** Asks which server to use (the only one without asking); `paths` filters out servers that map none of them. */
+async function pickServer(title: string, paths?: string[]): Promise<DeploymentServerValid | null> {
+  const all = deployment().servers;
+  const servers = paths?.length ? all.filter((s) => serverCovers(s, paths, projectRoot())) : all;
   if (!servers.length) {
     notifyNoServers();
     return null;
@@ -284,7 +285,7 @@ export function registerDeploymentActions(): () => void {
       category: CATEGORY,
       when,
       keywords: ["deploy", "sftp", "upload", "remote"],
-      run: withTargets(async (paths) => transfer("upload", await pickServer("Upload to"), paths)),
+      run: withTargets(async (paths) => transfer("upload", await pickServer("Upload to", paths), paths)),
     },
     {
       id: "deployment.downloadFromDefault",

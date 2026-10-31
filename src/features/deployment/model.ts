@@ -85,6 +85,30 @@ export function resolveServer(settings: DeploymentSettingsValid, id: string | nu
   return servers.find((s) => s.id === defaultServer) ?? (servers.length === 1 ? servers[0]! : null);
 }
 
+/**
+ * Whether `server` can upload at least one of the `paths`: a path outside every
+ * mapping is skipped by the backend, so servers whose mappings do not cover any
+ * target are pointless choices (issue #538). An empty mapping list maps the
+ * project root, which covers everything.
+ */
+export function serverCovers(
+  server: Pick<DeploymentServerValid, "mappings">,
+  paths: readonly string[],
+  projectRoot: string | null,
+): boolean {
+  if (!server.mappings.length || !projectRoot) return true;
+  return paths.some((p) => {
+    const rel = p.startsWith(`${projectRoot}/`) ? p.slice(projectRoot.length + 1) : null;
+    return (
+      rel !== null &&
+      server.mappings.some((m) => {
+        const local = m.local.replace(/^\/+|\/+$/g, "");
+        return !local || rel === local || rel.startsWith(`${local}/`);
+      })
+    );
+  });
+}
+
 export const serverLabel = (s: Pick<DeploymentServerValid, "id" | "name">) => s.name.trim() || s.id;
 
 export interface ReportSummary {

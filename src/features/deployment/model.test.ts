@@ -10,6 +10,7 @@ import {
   remoteName,
   remoteParent,
   resolveServer,
+  serverCovers,
   sshRemedy,
   summarizeReport,
   syncChoices,
@@ -100,6 +101,18 @@ describe("servers and reports", () => {
     expect(resolveServer({ ...DEFAULT_DEPLOYMENT, servers: [a, b], defaultServer: "" }, null)).toBeNull();
     expect(resolveServer({ ...DEFAULT_DEPLOYMENT, servers: [a], defaultServer: "" }, null)?.id).toBe("a");
     expect(resolveServer({ ...DEFAULT_DEPLOYMENT, servers: [a, b], defaultServer: "b" }, "a")?.id).toBe("a");
+  });
+
+  it("filters servers whose mappings cover none of the targets", () => {
+    const app = { ...a, mappings: [{ local: "app", deployment: "app", web: "" }] };
+    const docs = { ...b, mappings: [{ local: "docs", deployment: "docs", web: "" }] };
+    const everything = { ...a, mappings: [] };
+    const paths = [`${ROOT}/app/main.ts`, `${ROOT}/other.txt`];
+    expect(serverCovers(app, paths, ROOT)).toBe(true);
+    expect(serverCovers(docs, paths, ROOT)).toBe(false);
+    expect(serverCovers(everything, paths, ROOT)).toBe(true);
+    expect(serverCovers(app, [`${ROOT}/docs/x.md`], ROOT)).toBe(false);
+    expect(serverCovers(app, paths, null)).toBe(true);
   });
 
   it("summarizes transfer reports", () => {
