@@ -5215,5 +5215,13 @@
   "Pull request #{n} exists for current branch {branch}": "当前分支 {branch} 存在拉取请求 #{n}",
   "Show Review Diff": "显示审查差异",
   "Pull Request branch update failed": "拉取请求分支更新失败",
-  "#{n} on {branch}": "#{n} 位于 {branch}"
+  "#{n} on {branch}": "#{n} 位于 {branch}",
+  "Markdown Images": "Markdown 图片",
+  "Image folder": "图片文件夹",
+  "Relative to the Markdown file.": "相对于 Markdown 文件。",
+  "Image name pattern": "图片名称格式",
+  "For clipboard images: {timestamp} becomes YYYYMMDD-HHmmss. Source file names are preserved.": "剪贴板图片中的 {timestamp} 替换为 YYYYMMDD-HHmmss。保留源文件名称。",
+  "Image folder must be relative.": "图片文件夹必须使用相对路径。",
+  "Image exceeds 16 MB.": "图片超过 16 MB。",
+  "Cannot insert image": "无法插入图片"
 }
