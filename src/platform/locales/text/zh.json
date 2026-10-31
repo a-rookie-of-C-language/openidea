@@ -5249,5 +5249,10 @@
   "A scheme named '{name}' already exists.": "名为“{name}”的配色方案已存在。",
   "Applied {applied} values; skipped {skipped} unsupported or invalid values.": "已应用 {applied} 个值；跳过了 {skipped} 个不支持或无效的值。",
   "Delete color scheme '{name}'?": "删除配色方案“{name}”？",
-  "Overwrite": "覆盖"
+  "Overwrite": "覆盖",
+  "Open Results in Find Window": "在查找窗口中打开结果",
+  "Multiple Cursors": "多个光标",
+  "Scroll to Results During Typing": "键入时滚动到结果",
+  "Find options": "查找选项",
+  "Occurrences of '{0}'": "“{0}”的出现位置"
 }
