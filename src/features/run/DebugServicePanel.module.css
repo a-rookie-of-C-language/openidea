@@ -1,0 +1,75 @@
+/* Debug session console in the Services detail pane. */
+.session {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.toolbar {
+  flex: none;
+  width: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0;
+  border-right: 1px solid var(--border);
+}
+.toolbarSep {
+  width: 16px;
+  height: 1px;
+  margin: 3px 0;
+  background: var(--border-strong);
+}
+
+.consoleOutput {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui);
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-user-select: text;
+  user-select: text;
+  outline: none;
+  color: var(--fg);
+}
+
+.consoleInner {
+  position: relative;
+  width: 100%;
+}
+
+.out {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 100%;
+  color: var(--fg);
+}
+.cat-stderr {
+  color: var(--danger);
+}
+.cat-console,
+.cat-system {
+  color: var(--fg-subtle);
+}
+.cat-important {
+  color: var(--accent);
+}
+.cat-input {
+  color: var(--fg-secondary);
+}
+.cat-result {
+  color: var(--fg-emphasis);
+}
+
+.empty {
+  padding: 12px 4px;
+  color: var(--fg-subtle);
+}
