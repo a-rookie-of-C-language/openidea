@@ -5318,5 +5318,9 @@
   "No selected paths can be deployed to {server}": "所选路径均无法部署到 {server}",
   "No deployment server covers the selected paths": "没有部署服务器覆盖所选路径",
   "Not covered by this server's mappings": "此服务器的映射未覆盖该路径",
-  "Excluded from deployment": "已从部署中排除"
+  "Excluded from deployment": "已从部署中排除",
+  "No debug output available": "暂无可用的调试输出",
+  "The attached process may not provide standard output to the debugger.": "附加的进程可能不会向调试器提供标准输出。",
+  "Show in Debug Tool Window": "在调试工具窗口中显示",
+  "Suspended": "已暂停"
 }
