@@ -8,7 +8,7 @@ import { ContextMenuHost, dragSession, hideContextMenu } from "@/ui";
 import { AgentsView } from "./AgentsView";
 import { SESSION_KIND } from "./model";
 import { archiveTask, unarchiveTask, deleteTask, dockTask, openTask, undockTask, useAgents } from "./store";
-import { taskActions } from "./taskActions";
+import { taskActions, taskMenu } from "./taskActions";
 import styles from "./Agents.module.css";
 
 const editor = vi.hoisted(() => ({
@@ -166,6 +166,21 @@ describe("Agents docked view", () => {
     expect(openTask).not.toHaveBeenCalled();
   });
 
+  it("hides the docked task from the list below", () => {
+    useAgents.setState({ docked: "one" });
+    setup();
+    const tree = within(screen.getByRole("tree", { name: "Agent tasks" }));
+    expect(tree.queryByText("one")).toBeNull();
+    expect(tree.getByText("two")).toBeTruthy();
+  });
+
+  it("gives the whole tool window to the conversation when the docked task is the only one", () => {
+    useAgents.setState({ tasks: new Map([task("one")].map((t) => [t.id, t])), docked: "one" });
+    setup();
+    expect(screen.queryByRole("tree", { name: "Agent tasks" })).toBeNull();
+    expect(screen.getByTestId("docked-session")).toBeTruthy();
+  });
+
   it("undocks from the docked conversation's bar", () => {
     useAgents.setState({ docked: "one" });
     setup();
@@ -273,8 +288,10 @@ describe("Agents task menu", () => {
   it("offers to move the docked task back to an editor", async () => {
     useAgents.setState({ docked: "one" });
     setup();
-    context("one");
-    fireEvent.click(screen.getByRole("menuitem", { name: "Open in Editor" }));
+    // The docked task is not listed; its menu lives on the docked conversation's header.
+    const menu = taskMenu([useAgents.getState().tasks.get("one")!]);
+    expect(menu).toContainEqual(expect.objectContaining({ action: "agents.undockTask", label: "Open in Editor" }));
+    await taskActions.find((action) => action.id === "agents.undockTask")!.run({ ctx: {}, arg: "one" });
     await waitFor(() => expect(undockTask).toHaveBeenCalledTimes(1));
   });
 });

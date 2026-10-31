@@ -70,6 +70,8 @@ import styles from "./Session.module.css";
 export function SessionEditor({ input }: { input: EditorInput }) {
   const id = (input.data as { task: string }).task;
   const task = useAgents((s) => s.tasks.get(id));
+  // The tool window bar above already shows the title of a docked conversation.
+  const docked = useAgents((s) => s.docked === id);
   const entries = useAgents((s) => s.entries.get(id));
   const changes = useAgents((s) => s.changes.get(id));
   const project = useProject((s) => s.project);
@@ -112,7 +114,7 @@ export function SessionEditor({ input }: { input: EditorInput }) {
   if (!task) return <EmptyState title="This agent task no longer exists" />;
   return (
     <div
-      className={styles.session}
+      className={clsx(styles.session, docked && styles.docked)}
       onFocusCapture={() => setFocusedSession(session)}
       onBlurCapture={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null) && focusedSession() === session) {
@@ -128,6 +130,7 @@ export function SessionEditor({ input }: { input: EditorInput }) {
           changes={changes ?? null}
           changesOpen={changesOpen}
           onToggleChanges={() => setChangesOpen(!changesOpen)}
+          docked={docked}
         />
         {view && <SubagentBar task={task} path={path} cards={cards} onNavigate={setPath} />}
         <PermissionBanner task={task} entries={entries ?? null} />
@@ -192,6 +195,7 @@ function Header({
   changes,
   changesOpen,
   onToggleChanges,
+  docked,
 }: {
   task: AgentTask;
   entries: AgentEntry[] | null;
@@ -199,6 +203,8 @@ function Header({
   changes: AgentChange[] | null;
   changesOpen: boolean;
   onToggleChanges: () => void;
+  /** The tool window bar above a docked conversation already shows the title. */
+  docked?: boolean;
 }) {
   const project = useProject((s) => s.project);
   const projectName = project?.workspace ? basename(task.projectRoot ?? project.root) : null;
@@ -214,9 +220,11 @@ function Header({
       }}
     >
       <TaskStatusIcon status={task.status} />
-      <span className={styles.title} title={task.title}>
-        {task.title}
-      </span>
+      {!docked && (
+        <span className={styles.title} title={task.title}>
+          {task.title}
+        </span>
+      )}
       <span className={styles.headerDetail} title={task.cwd}>
         <Icon name={providerIcon(task.provider)} size={13} className={styles.providerIcon} />
         <span className={styles.headerText}>

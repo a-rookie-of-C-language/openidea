@@ -94,7 +94,11 @@ export function AgentsView() {
       }),
     [],
   );
-  const roots = useMemo<Node[]>(() => groupTasks(tasks.values()).map((group) => ({ kind: "group", group })), [tasks]);
+  // The docked conversation is already shown above; listing it again is noise.
+  const roots = useMemo<Node[]>(
+    () => groupTasks([...tasks.values()].filter((t) => t.id !== docked)).map((group) => ({ kind: "group", group })),
+    [tasks, docked],
+  );
   const expanded = useMemo(() => new Set(roots.map(nodeKey).filter((k) => !collapsed.has(k))), [roots, collapsed]);
   // Dropping a session editor tab anywhere on the tool window docks it.
   const viewRef = useRef<HTMLDivElement>(null);
@@ -158,83 +162,86 @@ export function AgentsView() {
           </div>
         </div>
       )}
-      <div className={styles.tasks}>
-        <Tree<Node>
-          aria-label="Agent tasks"
-          roots={roots}
-          getKey={nodeKey}
-          getLabel={(n) => (n.kind === "group" ? n.group.label : n.task.title)}
-          getChildren={(n) =>
-            n.kind === "group" ? n.group.tasks.map((task) => ({ kind: "task", task }) as Node) : undefined
-          }
-          isExpandable={(n) => n.kind === "group"}
-          expanded={expanded}
-          onExpandedChange={(_next, node, open) =>
-            setCollapsed((c) => {
-              const s = new Set(c);
-              if (open) s.delete(nodeKey(node));
-              else s.add(nodeKey(node));
-              return s;
-            })
-          }
-          selected={selected}
-          onSelectionChange={(sel, lead) => {
-            setSelected(sel);
-            if (sel.size === 1 && lead?.kind === "task" && sel.has(lead.task.id)) showTask(lead.task.id);
-          }}
-          onActivate={(n) => n.kind === "task" && showTask(n.task.id)}
-          onContextMenu={(n, sel, e) => {
-            if (n?.kind !== "task") return;
-            const selection = [...sel].flatMap((id) => {
-              const task = tasks.get(id);
-              return task ? [task] : [];
-            });
-            showContextMenu(e, taskMenu(selection));
-          }}
-          renderNode={(n) =>
-            n.kind === "group" ? (
-              <span className={styles.row}>
-                <span className={styles.groupLabel}>
-                  <T>{n.group.label}</T>
-                </span>
-                <span className={styles.count}>{n.group.tasks.length}</span>
-              </span>
-            ) : (
-              <span
-                className={styles.row}
-                title={n.task.error ?? n.task.title}
-                onPointerDown={(e) => dragTask(e, n.task.id)}
-              >
-                <TaskStatusIcon status={n.task.status} />
-                <span className={styles.title} data-unread={unread.has(n.task.id) || undefined}>
-                  {n.task.title}
-                </span>
-                {unread.has(n.task.id) && (
-                  <span className={styles.unreadDot} role="img" aria-label={tx("Unread")} title={tx("Unread")} />
-                )}
-                {project?.workspace && (
-                  <span className={styles.taskProject} title={n.task.projectRoot ?? project.root}>
-                    {basename(n.task.projectRoot ?? project.root)}
+      {/* Docked with nothing else to list: give the whole window to the conversation. */}
+      {(roots.length > 0 || !docked) && (
+        <div className={styles.tasks}>
+          <Tree<Node>
+            aria-label="Agent tasks"
+            roots={roots}
+            getKey={nodeKey}
+            getLabel={(n) => (n.kind === "group" ? n.group.label : n.task.title)}
+            getChildren={(n) =>
+              n.kind === "group" ? n.group.tasks.map((task) => ({ kind: "task", task }) as Node) : undefined
+            }
+            isExpandable={(n) => n.kind === "group"}
+            expanded={expanded}
+            onExpandedChange={(_next, node, open) =>
+              setCollapsed((c) => {
+                const s = new Set(c);
+                if (open) s.delete(nodeKey(node));
+                else s.add(nodeKey(node));
+                return s;
+              })
+            }
+            selected={selected}
+            onSelectionChange={(sel, lead) => {
+              setSelected(sel);
+              if (sel.size === 1 && lead?.kind === "task" && sel.has(lead.task.id)) showTask(lead.task.id);
+            }}
+            onActivate={(n) => n.kind === "task" && showTask(n.task.id)}
+            onContextMenu={(n, sel, e) => {
+              if (n?.kind !== "task") return;
+              const selection = [...sel].flatMap((id) => {
+                const task = tasks.get(id);
+                return task ? [task] : [];
+              });
+              showContextMenu(e, taskMenu(selection));
+            }}
+            renderNode={(n) =>
+              n.kind === "group" ? (
+                <span className={styles.row}>
+                  <span className={styles.groupLabel}>
+                    <T>{n.group.label}</T>
                   </span>
-                )}
-                <span className={styles.detail}>
-                  {providerName(n.task.provider)}
-                  {n.task.isolation === "worktree" ? ` · ${branchLabel(n.task.branch)}` : ""}
+                  <span className={styles.count}>{n.group.tasks.length}</span>
                 </span>
-                <span className={styles.age}>{age(n.task.updatedMs ?? 0)}</span>
-              </span>
-            )
-          }
-          empty={
-            <div className={styles.empty}>
-              <T>No agent tasks yet</T>
-              <button type="button" className={styles.link} onClick={() => openHome()}>
-                <T>New Task…</T>
-              </button>
-            </div>
-          }
-        />
-      </div>
+              ) : (
+                <span
+                  className={styles.row}
+                  title={n.task.error ?? n.task.title}
+                  onPointerDown={(e) => dragTask(e, n.task.id)}
+                >
+                  <TaskStatusIcon status={n.task.status} />
+                  <span className={styles.title} data-unread={unread.has(n.task.id) || undefined}>
+                    {n.task.title}
+                  </span>
+                  {unread.has(n.task.id) && (
+                    <span className={styles.unreadDot} role="img" aria-label={tx("Unread")} title={tx("Unread")} />
+                  )}
+                  {project?.workspace && (
+                    <span className={styles.taskProject} title={n.task.projectRoot ?? project.root}>
+                      {basename(n.task.projectRoot ?? project.root)}
+                    </span>
+                  )}
+                  <span className={styles.detail}>
+                    {providerName(n.task.provider)}
+                    {n.task.isolation === "worktree" ? ` · ${branchLabel(n.task.branch)}` : ""}
+                  </span>
+                  <span className={styles.age}>{age(n.task.updatedMs ?? 0)}</span>
+                </span>
+              )
+            }
+            empty={
+              <div className={styles.empty}>
+                <T>No agent tasks yet</T>
+                <button type="button" className={styles.link} onClick={() => openHome()}>
+                  <T>New Task…</T>
+                </button>
+              </div>
+            }
+          />
+        </div>
+      )}
     </div>
   );
 }

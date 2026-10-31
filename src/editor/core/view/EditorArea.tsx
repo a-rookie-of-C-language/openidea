@@ -57,10 +57,46 @@ import { tx } from "@/platform/i18n";
 export function EditorAreaView() {
   const layout = useTabs((s) => s.layout);
   const empty = useTabs((s) => Object.values(s.panes).every((p) => p.tabs.length === 0));
-  if (empty && layout.kind === "pane") return <EmptyEditor />;
+  if (empty && layout.kind === "pane") return <EmptyEditorArea />;
   return (
     <div className={styles.area}>
       <LayoutView node={layout} />
+    </div>
+  );
+}
+
+/** The empty editor still accepts drops: reopening tabs, opening files, feature drags (agent tasks). */
+function EmptyEditorArea() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    return registerDropTarget(el, {
+      accepts: (type) => type === EDITOR_TAB_MIME || type === FILES_DRAG || acceptsEditorDrop(type),
+      over: () => setOver(true),
+      leave: () => setOver(false),
+      drop: (data) => {
+        setOver(false);
+        const paneId = Object.keys(useTabs.getState().panes)[0];
+        if (!paneId) return;
+        if (data.type === FILES_DRAG) {
+          void editorController().openFilesIn(data.payload.split("\n").filter(Boolean), paneId, "center");
+          return;
+        }
+        if (data.type !== EDITOR_TAB_MIME) {
+          dropOnEditor(data);
+          return;
+        }
+        const p = parseTabPayload(data.payload);
+        if (p) editorController().moveTab(p.paneId, p.tabId, paneId, 0);
+      },
+    });
+  }, []);
+  return (
+    <div ref={ref} className={styles.area}>
+      <EmptyEditor />
+      {over && <div className={clsx(styles.dropZone, styles["drop-center"])} aria-hidden="true" />}
     </div>
   );
 }
