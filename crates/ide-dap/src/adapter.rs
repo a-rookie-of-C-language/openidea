@@ -588,6 +588,8 @@ mod tests {
         assert_eq!(sink.lock().len(), 3);
     }
 
+    /// Managed tools win over `PATH`, and debugpy falls back to the private copy.
+    #[cfg(unix)]
     #[tokio::test]
     async fn managed_tools_and_private_debugpy() {
         use std::os::unix::fs::PermissionsExt;
