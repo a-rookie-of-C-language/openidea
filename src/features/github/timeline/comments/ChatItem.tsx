@@ -9,7 +9,7 @@ import type { GHActor } from "../../api/types";
 import { GHOST_USER } from "../../data/model";
 import { openInBrowser } from "../../data/local";
 import { Avatar, AVATAR_SIZE } from "../../ui/Avatar";
-import { prettyDateTime } from "../../ui/prettyDate";
+import { fullDateTime, prettyDate } from "../../ui/prettyDate";
 import { presentableName } from "../model";
 import styles from "./comments.module.css";
 
@@ -78,7 +78,11 @@ export function ChatItem({
             {title ?? (
               <span>
                 <AuthorLink actor={a} />
-                {date && <span className={styles.date}>&nbsp;{prettyDateTime(date)}</span>}
+                {date && (
+                  <span className={styles.date} title={fullDateTime(date)}>
+                    &nbsp;{prettyDate(date)}
+                  </span>
+                )}
               </span>
             )}
             {tags}

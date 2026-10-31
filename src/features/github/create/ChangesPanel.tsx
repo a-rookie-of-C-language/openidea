@@ -12,7 +12,7 @@ import type { Commit } from "@/platform/ipc";
 import { tx } from "@/platform/i18n";
 import { Icon, IconButton, Spinner, T, Tree, fileIconName, showContextMenu, type MenuItem } from "@/ui";
 import { ChooserPopup } from "../ui/ChooserPopup";
-import { prettyDateTime } from "../ui/prettyDate";
+import { prettyDate } from "../ui/prettyDate";
 import { commitDescription } from "./model";
 import { selectCommit, useCreatePr, type CreateChange } from "./store";
 import styles from "./Create.module.css";
@@ -119,7 +119,7 @@ function CommitChooser({ commits, selected }: { commits: Commit[]; selected: Com
             c
               ? {
                   text: c.summary,
-                  detail: `${c.author}, ${c.timeMs ? prettyDateTime(c.timeMs) : ""}`,
+                  detail: `${c.author}, ${c.timeMs ? prettyDate(c.timeMs) : ""}`,
                   icon: selected?.id === c.id ? "check" : "commit",
                 }
               : { text: tx`All commits (${commits.length})`, icon: selected ? "commit" : "check" }
@@ -150,7 +150,7 @@ function CommitDetails({ commit }: { commit: Commit }) {
       {details && description && <div className={styles.commitBody}>{description}</div>}
       {details && (
         <div className={styles.commitMeta}>
-          {commit.author}, {commit.timeMs ? prettyDateTime(commit.timeMs) : ""}
+          {commit.author}, {commit.timeMs ? prettyDate(commit.timeMs) : ""}
         </div>
       )}
     </div>

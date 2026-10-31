@@ -6,27 +6,28 @@ import { Avatar, AvatarStack, avatarSrc, reviewerRingColor } from "./Avatar";
 import { BranchChip, LabelChip, StateTag, labelForeground } from "./chips";
 import { ChooserPopup, chooserItems } from "./ChooserPopup";
 import { Markdown } from "./Markdown";
-import { prettyDate, prettyDateTime } from "./prettyDate";
+import { fullDateTime, prettyDate } from "./prettyDate";
 
 describe("prettyDate", () => {
   const o = { ...DEFAULT_DATE_FORMAT, overrideSystem: true, pattern: "dd.MM.yyyy", use24Hour: true };
-  const now = new Date(2026, 9, 30, 15, 0).getTime();
+  const now = new Date(2026, 9, 31, 9, 2).getTime();
 
-  it("formats like DateFormatUtil.formatPrettyDate", () => {
-    expect(prettyDate(now - 20_000, now, o)).toBe("Moments ago");
+  it("formats relative dates like GitHub", () => {
+    expect(prettyDate(now - 20_000, now, o)).toBe("just now");
+    expect(prettyDate(now + 20_000, now, o)).toBe("just now");
     expect(prettyDate(now - 60_000, now, o)).toBe("1 minute ago");
     expect(prettyDate(now - 42 * 60_000, now, o)).toBe("42 minutes ago");
-    expect(prettyDate(now - 3 * 3_600_000, now, o)).toBe("Today");
-    expect(prettyDate(new Date(2026, 9, 29, 9, 5).getTime(), now, o)).toBe("Yesterday");
-    expect(prettyDate(new Date(2026, 8, 2, 9, 5).getTime(), now, o)).toBe("02.09.2026");
+    expect(prettyDate(now - 3_600_000, now, o)).toBe("1 hour ago");
+    expect(prettyDate(new Date(2026, 9, 31, 0, 27).getTime(), now, o)).toBe("8 hours ago");
+    expect(prettyDate(new Date(2026, 9, 30, 8, 0).getTime(), now, o)).toBe("yesterday");
+    expect(prettyDate(new Date(2026, 9, 21, 9, 5).getTime(), now, o)).toBe("9 days ago");
+    expect(prettyDate(new Date(2026, 8, 2, 9, 5).getTime(), now, o)).toBe("on 02.09.2026");
     expect(prettyDate("not a date", now, o)).toBe("");
   });
 
-  it("adds the time with formatPrettyDateTime, and honours pretty formatting off", () => {
-    expect(prettyDateTime(new Date(2026, 9, 30, 9, 5).getTime(), now, o)).toBe("Today 09:05");
-    expect(prettyDateTime(new Date(2026, 9, 29, 9, 5).getTime(), now, o)).toBe("Yesterday 09:05");
-    expect(prettyDateTime(new Date(2026, 8, 2, 9, 5).getTime(), now, o)).toBe("02.09.2026 09:05");
-    expect(prettyDate(now - 20_000, now, { ...o, pretty: false })).toBe("30.10.2026");
+  it("shows the plain date and time with pretty formatting off", () => {
+    expect(prettyDate(now - 20_000, now, { ...o, pretty: false })).toBe("31.10.2026 09:01");
+    expect(fullDateTime(new Date(2026, 9, 31, 0, 27).getTime(), o)).toBe("31.10.2026 00:27");
   });
 });
 

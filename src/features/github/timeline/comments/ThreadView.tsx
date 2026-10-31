@@ -30,7 +30,7 @@ import {
 } from "../../data/operations";
 import { AvatarStack } from "../../ui/Avatar";
 import { Markdown } from "../../ui/Markdown";
-import { prettyDateTime } from "../../ui/prettyDate";
+import { fullDateTime, prettyDate } from "../../ui/prettyDate";
 import { presentableName, threadDiffHunk, threadDiffWithAnchor } from "../model";
 import { ChatItem, Tag, type ChatItemVariant } from "./ChatItem";
 import { CommentEditor, submitShortcut } from "./CommentEditor";
@@ -288,7 +288,11 @@ function FullThread({ number, thread }: Omit<ThreadViewProps, "variant">) {
                 >
                   {n === 0 ? t("Reply") : n === 1 ? tx`${n} reply` : tx`${n} replies`}
                 </button>
-                {last && <span className={styles.secondary}>{prettyDateTime(last.createdAt)}</span>}
+                {last && (
+                  <span className={styles.secondary} title={fullDateTime(last.createdAt)}>
+                    {prettyDate(last.createdAt)}
+                  </span>
+                )}
               </span>
             )}
             {resolve.canChange && (

@@ -23,7 +23,7 @@ import {
 import { useTx } from "@/platform/i18n";
 import type { GHPullRequestCommit } from "../api/types";
 import { GHOST_USER } from "../data/model";
-import { prettyDateTime } from "../ui/prettyDate";
+import { prettyDate } from "../ui/prettyDate";
 import { commitsTitle, stepCommit } from "./model";
 import styles from "./Details.module.css";
 
@@ -34,7 +34,7 @@ function presentation(c: GHPullRequestCommit) {
     title: c.commit.messageHeadline,
     description: c.commit.messageBody,
     author: user.name || user.login,
-    date: prettyDateTime(c.commit.committedDate),
+    date: prettyDate(c.commit.committedDate),
   };
 }
 

@@ -21,7 +21,7 @@ import { sameRepository, useGhRepository } from "../data/repository";
 import { openPullRequest } from "../toolwindow/open";
 import { BranchChip, LabelChip } from "../ui/chips";
 import { Markdown } from "../ui/Markdown";
-import { prettyDateTime } from "../ui/prettyDate";
+import { fullDateTime, prettyDate } from "../ui/prettyDate";
 import { ChatItem, CommentItem, ThreadView } from "./comments";
 import { joined, rich } from "./comments/ChatItem";
 import {
@@ -293,7 +293,11 @@ function CommitsItem({ commits, prAuthor }: { commits: TimelineCommit[]; prAutho
                 {actor && (
                   <p className={styles.paragraph}>
                     {actorLink(actor)}
-                    {author?.date && <>&nbsp;{prettyDateTime(author.date)}</>}
+                    {author?.date && (
+                      <>
+                        &nbsp;<span title={fullDateTime(author.date)}>{prettyDate(author.date)}</span>
+                      </>
+                    )}
                   </p>
                 )}
               </div>
