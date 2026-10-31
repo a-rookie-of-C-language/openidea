@@ -307,9 +307,17 @@ export function Tree<T>(props: TreeProps<T>) {
     getItemKey: (i) => rows[i]!.key,
   });
 
+  // Keep the keyboard lead in view when the lead changes — not when its index
+  // shifts because expanding or collapsing elsewhere inserted rows above it:
+  // following the index would yank the viewport from the folder the user just
+  // opened back to the selection.
+  const scrollToLead = useRef({ indexOfKey, virtualizer });
+  scrollToLead.current = { indexOfKey, virtualizer };
   useEffect(() => {
-    if (leadIndex >= 0) virtualizer.scrollToIndex(leadIndex, { align: "auto" });
-  }, [leadIndex, virtualizer]);
+    if (lead == null) return;
+    const i = scrollToLead.current.indexOfKey.get(lead);
+    if (i !== undefined) scrollToLead.current.virtualizer.scrollToIndex(i, { align: "auto" });
+  }, [lead]);
 
   // Speed search owns Escape while active.
   useEffect(() => {

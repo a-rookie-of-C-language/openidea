@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 import { createRef } from "react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { Tree, type TreeHandle } from "./Tree";
@@ -362,5 +362,42 @@ describe("Tree horizontal scrolling", () => {
     } finally {
       width.mockRestore();
     }
+  });
+});
+
+describe("Tree scroll following", () => {
+  let scrollTo: ReturnType<typeof vi.fn>;
+  let original: PropertyDescriptor | undefined;
+
+  beforeAll(() => {
+    // jsdom has no Element.scrollTo; virtual-core calls it to write scrollTop.
+    scrollTo = vi.fn();
+    original = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTo");
+    Object.defineProperty(Element.prototype, "scrollTo", { value: scrollTo, configurable: true, writable: true });
+  });
+
+  afterAll(() => {
+    if (original) Object.defineProperty(Element.prototype, "scrollTo", original);
+    else delete (Element.prototype as { scrollTo?: unknown }).scrollTo;
+  });
+
+  it("brings the keyboard lead into view", () => {
+    const { key } = setup();
+    scrollTo.mockClear();
+    key("End");
+    expect(scrollTo).toHaveBeenCalled();
+  });
+
+  it("keeps the viewport when expanding a folder above the selection", () => {
+    // The selected file stays selected while rows inserted above it shift its
+    // index; scrolling then would jump to the selection from the opened folder.
+    const { tree } = setup({ defaultSelected: ["README.md"] });
+    scrollTo.mockClear();
+    const chevron = tree.querySelector("[data-tree-toggle]");
+    expect(chevron).not.toBeNull();
+    fireEvent.mouseDown(chevron!, { button: 0 });
+    expect(scrollTo).not.toHaveBeenCalled();
+    // The folder did open, inserting rows above the selection.
+    expect(within(tree).queryAllByRole("treeitem").length).toBeGreaterThan(2);
   });
 });
