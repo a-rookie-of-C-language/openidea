@@ -12,6 +12,7 @@ import { useProject } from "@/platform/project";
 import { EDIT_SCOPES_ACTION } from "@/platform/search";
 import { isVirtualUri } from "@/platform/virtualDocs";
 import { registerMenuGroup, registerOverlay, registerToolWindow } from "@/workbench/contributions";
+import { currentModel, useProjectTree } from "../project-tree/store";
 import { BookmarkPopupsOverlay } from "./bookmarks/BookmarkPopups";
 import { bookmarkGutter } from "./bookmarks/gutter";
 import {
@@ -53,6 +54,24 @@ function editorSelectionText(): string | null {
   if (from === to || to - from > 200) return null;
   const text = view.state.sliceDoc(from, to);
   return text.includes("\n") ? null : text;
+}
+
+/**
+ * The folder Find / Replace in Files scopes to when it is invoked from the project
+ * tree: the lead selection's own folder, as IDEA's "Find in Files" preselects the
+ * Directory scope for a selected folder. `null` when the tree does not have the
+ * focus (an editor invocation keeps the popup's previous scope) or no folder is
+ * selected — a selected file scopes to its parent.
+ */
+function treeFindDirectory(): string | null {
+  if (typeof document === "undefined" || !document.activeElement?.closest('[role="tree"]')) return null;
+  const { lead, selected } = useProjectTree.getState();
+  const key = lead ?? (selected.size === 1 ? [...selected][0] : null);
+  const node = key ? currentModel().byKey.get(key) : undefined;
+  if (!node || node.placeholder || node.group || node.root) return null;
+  if (node.dir) return node.path;
+  const at = node.path.lastIndexOf("/");
+  return at > 0 ? node.path.slice(0, at) : null;
 }
 
 /** The active editor's caret line (and where to show a popup for it). */
@@ -328,7 +347,9 @@ export function activate(): void | (() => void) {
         when: "projectOpen",
         run: ({ arg }) => {
           closeAllPopups("find");
-          showFindPopup(false, { ...parseFindArg(arg), selection: editorSelectionText() });
+          const find = parseFindArg(arg);
+          find.directory ??= treeFindDirectory() ?? undefined;
+          showFindPopup(false, { ...find, selection: editorSelectionText() });
         },
       },
       {
@@ -356,7 +377,9 @@ export function activate(): void | (() => void) {
         when: "projectOpen",
         run: ({ arg }) => {
           closeAllPopups("find");
-          showFindPopup(true, { ...parseFindArg(arg), selection: editorSelectionText() });
+          const find = parseFindArg(arg);
+          find.directory ??= treeFindDirectory() ?? undefined;
+          showFindPopup(true, { ...find, selection: editorSelectionText() });
         },
       },
       // Keys of the Find in Files popup that are global shortcuts elsewhere (bound after them).
