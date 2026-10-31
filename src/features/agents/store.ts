@@ -369,6 +369,12 @@ export function undockTask() {
   openTask(docked);
 }
 
+/** A task dragged from the tool window onto the editor: undock it if docked, otherwise open a tab. */
+export function openDroppedTask(task: string) {
+  if (useAgents.getState().docked === task) undockTask();
+  else openTask(task);
+}
+
 /** Opens the New Task page; `prompt` pre-fills it. */
 export function openHome(prompt?: string) {
   const project = useProject.getState().project;

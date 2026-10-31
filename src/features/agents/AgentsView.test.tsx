@@ -2,17 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { AgentTask } from "@/bindings";
 import { registerActions } from "@/platform/actions";
-import type { EditorInput } from "@/workbench/contributions";
+import { EDITOR_TAB_MIME, type EditorInput } from "@/workbench/contributions";
 import { confirmChecked, showError } from "@/workbench/messages";
-import { ContextMenuHost, hideContextMenu } from "@/ui";
+import { ContextMenuHost, dragSession, hideContextMenu } from "@/ui";
 import { AgentsView } from "./AgentsView";
 import { SESSION_KIND } from "./model";
 import { archiveTask, unarchiveTask, deleteTask, dockTask, openTask, undockTask, useAgents } from "./store";
 import { taskActions } from "./taskActions";
+import styles from "./Agents.module.css";
 
 const editor = vi.hoisted(() => ({
   active: undefined as EditorInput | undefined,
   listener: undefined as ((input: EditorInput) => void) | undefined,
+  tabInput: undefined as ((paneId: string, tabId: string) => EditorInput | null) | undefined,
 }));
 
 vi.mock("@/workbench/contributions", async (original) => ({
@@ -25,6 +27,7 @@ vi.mock("@/workbench/contributions", async (original) => ({
         editor.listener = undefined;
       };
     },
+    tabInput: editor.tabInput,
   }),
 }));
 
@@ -91,6 +94,7 @@ let dispose: () => void;
 beforeEach(() => {
   vi.clearAllMocks();
   editor.active = undefined;
+  editor.tabInput = undefined;
   vi.mocked(confirmChecked).mockResolvedValue({ checked: false });
   useAgents.setState({
     loaded: true,
@@ -272,5 +276,50 @@ describe("Agents task menu", () => {
     context("one");
     fireEvent.click(screen.getByRole("menuitem", { name: "Open in Editor" }));
     await waitFor(() => expect(undockTask).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("Agents drag & drop", () => {
+  // jsdom has no elementFromPoint; the drop target is found through it.
+  const pointAt = (el: Element) => {
+    const original = document.elementFromPoint;
+    document.elementFromPoint = () => el;
+    return () => {
+      document.elementFromPoint = original;
+    };
+  };
+
+  it("docks a session editor tab dropped on the tool window and highlights while it hovers", () => {
+    editor.tabInput = (paneId, tabId) =>
+      paneId === "p" && tabId === "t" ? { kind: SESSION_KIND, key: "agent:one", data: { task: "one" } } : null;
+    setup();
+    const view = document.querySelector(`.${styles.view}`)!;
+    const restore = pointAt(view);
+    try {
+      const session = dragSession({ type: EDITOR_TAB_MIME, payload: JSON.stringify({ paneId: "p", tabId: "t" }) });
+      act(() => session.move(10, 10));
+      expect(view.className).toContain(styles.dropTarget);
+      act(() => session.drop(10, 10));
+      expect(dockTask).toHaveBeenCalledWith("one");
+      expect(view.className).not.toContain(styles.dropTarget);
+    } finally {
+      restore();
+    }
+  });
+
+  it("ignores editor tab drags that are not agent sessions", () => {
+    editor.tabInput = () => null;
+    setup();
+    const view = document.querySelector(`.${styles.view}`)!;
+    const restore = pointAt(view);
+    try {
+      const session = dragSession({ type: EDITOR_TAB_MIME, payload: JSON.stringify({ paneId: "p", tabId: "t" }) });
+      act(() => session.move(10, 10));
+      expect(view.className).not.toContain(styles.dropTarget);
+      act(() => session.drop(10, 10));
+      expect(dockTask).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
   });
 });

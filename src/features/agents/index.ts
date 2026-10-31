@@ -9,6 +9,7 @@ import { executeAction } from "@/platform/actions";
 import { lazyComponent } from "@/ui";
 import { isVirtualUri } from "@/platform/virtualDocs";
 import {
+  registerEditorDropHandler,
   registerEditorKind,
   registerMenuGroup,
   registerSettingsPage,
@@ -17,10 +18,10 @@ import {
   toolWindowService,
 } from "@/workbench/contributions";
 import { AgentsStatus } from "./AgentsStatus";
-import { HOME_KIND, REGISTRY_PAGE, SESSION_KIND, TOOL_WINDOW } from "./model";
+import { HOME_KIND, REGISTRY_PAGE, SESSION_KIND, TASK_DRAG, TOOL_WINDOW } from "./model";
 import { sendPaths, sendSelection } from "./references";
 import { focusedSession } from "./sessionFocus";
-import { connect, disconnect, openHome, useAgents } from "./store";
+import { connect, disconnect, openDroppedTask, openHome, useAgents } from "./store";
 import { taskActions } from "./taskActions";
 
 /** Settings › Tools › Agents (also used by the Settings window). */
@@ -78,6 +79,11 @@ export function activate(): () => void {
       title: () => "New Agent Task",
       icon: () => "toolwindow-agents",
       restorable: true,
+    }),
+    // A task dragged from the tool window onto the editor opens as a tab (or undocks).
+    registerEditorDropHandler({
+      accepts: (type) => type === TASK_DRAG,
+      drop: ({ payload }) => openDroppedTask(payload),
     }),
     registerStatusItem({ id: "agents.status", align: "right", priority: 3, title: "Agents", component: AgentsStatus }),
     registerMenuGroup({

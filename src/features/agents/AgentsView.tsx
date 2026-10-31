@@ -1,9 +1,20 @@
 /** Agents tool window: tasks grouped by what they need from the user. */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import clsx from "clsx";
 import type { AgentStatus as Status, AgentTask } from "@/bindings";
-import { maybeEditorService, type EditorInput } from "@/workbench/contributions";
-import { EmptyState, Icon, IconButton, Spinner, T, Tree, showContextMenu } from "@/ui";
-import { SESSION_KIND, age, branchLabel, groupTasks, sessionKey, type TaskGroup } from "./model";
+import { EDITOR_TAB_MIME, maybeEditorService, type EditorInput } from "@/workbench/contributions";
+import {
+  EmptyState,
+  Icon,
+  IconButton,
+  Spinner,
+  T,
+  Tree,
+  registerDropTarget,
+  showContextMenu,
+  startPointerDrag,
+} from "@/ui";
+import { SESSION_KIND, TASK_DRAG, age, branchLabel, groupTasks, sessionKey, type TaskGroup } from "./model";
 import { dockTask, openHome, openTask, useAgents } from "./store";
 import { taskMenu } from "./taskActions";
 import { SessionEditor } from "./SessionEditor";
@@ -25,6 +36,18 @@ const nodeKey = (n: Node) => (n.kind === "group" ? `g:${n.group.status}` : n.tas
 
 const sessionTask = (input: EditorInput | null | undefined) =>
   input?.kind === SESSION_KIND ? (input.data as { task?: string } | undefined)?.task : undefined;
+
+/** The task of an editor tab drag payload (session tabs only), null for anything else. */
+const sessionPayloadTask = (payload: string): string | null => {
+  try {
+    const p = JSON.parse(payload) as { paneId?: unknown; tabId?: unknown };
+    if (typeof p.paneId !== "string" || typeof p.tabId !== "string") return null;
+    const input = maybeEditorService()?.tabInput?.(p.paneId, p.tabId);
+    return input?.kind === SESSION_KIND ? ((input.data as { task?: string }).task ?? null) : null;
+  } catch {
+    return null;
+  }
+};
 
 export function TaskStatusIcon({ status }: { status: Status }) {
   switch (status) {
@@ -73,6 +96,23 @@ export function AgentsView() {
   );
   const roots = useMemo<Node[]>(() => groupTasks(tasks.values()).map((group) => ({ kind: "group", group })), [tasks]);
   const expanded = useMemo(() => new Set(roots.map(nodeKey).filter((k) => !collapsed.has(k))), [roots, collapsed]);
+  // Dropping a session editor tab anywhere on the tool window docks it.
+  const viewRef = useRef<HTMLDivElement>(null);
+  const [tabOver, setTabOver] = useState(false);
+  useEffect(() => {
+    const el = viewRef.current;
+    if (!el) return;
+    return registerDropTarget(el, {
+      accepts: (type) => type === EDITOR_TAB_MIME,
+      over: (data) => setTabOver(sessionPayloadTask(data.payload) != null),
+      leave: () => setTabOver(false),
+      drop: (data) => {
+        setTabOver(false);
+        const task = sessionPayloadTask(data.payload);
+        if (task) dockTask(task);
+      },
+    });
+  }, [loaded, error]);
   if (!loaded)
     return (
       <div className={styles.loading}>
@@ -84,13 +124,19 @@ export function AgentsView() {
   // While a conversation is docked, clicking a task switches it instead of opening a tab.
   const showTask = (task: string) => (docked ? dockTask(task) : openTask(task));
   const dockedTitle = docked ? (tasks.get(docked)?.title ?? docked) : null;
+  const dragTask = (e: ReactPointerEvent<HTMLSpanElement>, task: string) =>
+    startPointerDrag(e, e.currentTarget, { type: TASK_DRAG, payload: task });
 
   return (
-    <div className={styles.view}>
+    <div ref={viewRef} className={clsx(styles.view, tabOver && styles.dropTarget)}>
       {docked && (
         <div className={styles.docked}>
           <div className={styles.dockedBar}>
-            <span className={styles.dockedTitle} title={dockedTitle ?? undefined}>
+            <span
+              className={styles.dockedTitle}
+              title={dockedTitle ?? undefined}
+              onPointerDown={(e) => dragTask(e, docked)}
+            >
               {dockedTitle}
             </span>
             <IconButton
@@ -154,7 +200,11 @@ export function AgentsView() {
                 <span className={styles.count}>{n.group.tasks.length}</span>
               </span>
             ) : (
-              <span className={styles.row} title={n.task.error ?? n.task.title}>
+              <span
+                className={styles.row}
+                title={n.task.error ?? n.task.title}
+                onPointerDown={(e) => dragTask(e, n.task.id)}
+              >
                 <TaskStatusIcon status={n.task.status} />
                 <span className={styles.title} data-unread={unread.has(n.task.id) || undefined}>
                   {n.task.title}
