@@ -400,4 +400,69 @@ describe("Tree scroll following", () => {
     // The folder did open, inserting rows above the selection.
     expect(within(tree).queryAllByRole("treeitem").length).toBeGreaterThan(2);
   });
+
+  it.each(["defaultSelected", "selected"] as const)("scrolls a late %s lead once when its row loads", (selection) => {
+    const view = (roots: N[]) => (
+      <Tree<N>
+        roots={roots}
+        getKey={(n) => n.id}
+        getLabel={(n) => n.id}
+        getChildren={(n) => n.children}
+        isExpandable={(n) => n.id === "src" || !!n.children}
+        defaultExpanded={["src"]}
+        {...{ [selection]: new Set(["late.ts"]) }}
+      />
+    );
+    const { rerender } = render(view([{ id: "src" }]));
+    scrollTo.mockClear();
+    // An intermediate load still does not contain the selected row.
+    rerender(view([{ id: "src", children: [{ id: "main", children: [{ id: "App.tsx" }] }] }]));
+    expect(scrollTo).not.toHaveBeenCalled();
+    rerender(view([{ id: "src", children: [{ id: "main", children: [{ id: "App.tsx" }] }, { id: "late.ts" }] }]));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("treeitem", { name: "late.ts" })).toHaveAttribute("aria-selected", "true");
+    scrollTo.mockClear();
+    const folder = screen.getByRole("treeitem", { name: "main" });
+    fireEvent.mouseDown(folder.querySelector("[data-tree-toggle]")!, { button: 0 });
+    expect(screen.getByRole("treeitem", { name: "App.tsx" })).toBeInTheDocument();
+    expect(scrollTo).not.toHaveBeenCalled();
+    fireEvent.mouseDown(folder.querySelector("[data-tree-toggle]")!, { button: 0 });
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("replaces a pending lead when the user selects another row", () => {
+    const view = (roots: N[]) => (
+      <Tree<N>
+        roots={roots}
+        getKey={(n) => n.id}
+        getLabel={(n) => n.id}
+        getChildren={(n) => n.children}
+        isExpandable={(n) => !!n.children}
+        defaultSelected={["late.ts"]}
+      />
+    );
+    const { rerender } = render(view([{ id: "README.md" }]));
+    fireEvent.keyDown(screen.getByRole("tree"), { key: "End" });
+    scrollTo.mockClear();
+    rerender(view([{ id: "late.ts" }, { id: "README.md" }]));
+    expect(screen.getByRole("treeitem", { name: "README.md" })).toHaveAttribute("aria-selected", "true");
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("explicitly reveals an unchanged lead", () => {
+    const handle = createRef<TreeHandle>();
+    setup({ handleRef: handle, defaultSelected: ["README.md"] });
+    scrollTo.mockClear();
+    act(() => handle.current!.reveal("README.md"));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it("brings speed search matches into view", () => {
+    const { key, lead } = setup({ defaultExpanded: ["src", "main"] });
+    key("Home");
+    scrollTo.mockClear();
+    key("u");
+    expect(lead()).toBe("util.ts");
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
 });

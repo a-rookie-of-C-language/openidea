@@ -311,13 +311,20 @@ export function Tree<T>(props: TreeProps<T>) {
   // shifts because expanding or collapsing elsewhere inserted rows above it:
   // following the index would yank the viewport from the folder the user just
   // opened back to the selection.
-  const scrollToLead = useRef({ indexOfKey, virtualizer });
-  scrollToLead.current = { indexOfKey, virtualizer };
+  const pendingScrollToLead = useRef<string | null>(null);
   useEffect(() => {
-    if (lead == null) return;
-    const i = scrollToLead.current.indexOfKey.get(lead);
-    if (i !== undefined) scrollToLead.current.virtualizer.scrollToIndex(i, { align: "auto" });
+    pendingScrollToLead.current = lead;
   }, [lead]);
+  // A preselected lead may arrive before its row is loaded. Retry until it
+  // appears, then stop following index changes for that selection.
+  useEffect(() => {
+    const key = pendingScrollToLead.current;
+    if (key == null) return;
+    const i = indexOfKey.get(key);
+    if (i === undefined) return;
+    virtualizer.scrollToIndex(i, { align: "auto" });
+    pendingScrollToLead.current = null;
+  }, [lead, indexOfKey, virtualizer]);
 
   // Speed search owns Escape while active.
   useEffect(() => {
