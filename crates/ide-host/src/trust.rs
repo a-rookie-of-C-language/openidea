@@ -106,6 +106,9 @@ impl crate::Host {
             if previous == trusted {
                 continue;
             }
+            if let Some(bridge) = &project.kotlin_bridge {
+                bridge.schedule();
+            }
             if !trusted {
                 project.lsp.set_execution_allowed(false);
             }
@@ -132,9 +135,7 @@ impl crate::Host {
                     for request in requests {
                         self.cancel_request(request);
                     }
-                    for session in self.debugger.sessions(Some(&window)) {
-                        let _ = self.debugger.stop(session.id).await;
-                    }
+                    self.debugger.stop_key(&window).await;
                 }
             }
             project.lsp.reconfigure().await;
@@ -208,6 +209,10 @@ pub fn restricted_command_allowed(cmd: &str) -> bool {
             | "menu_model"
             | "menu_configure"
             | "menu_set_disabled"
+            | "prepare_workspace_edit"
+            | "apply_workspace_edit"
+            | "undo_workspace_edit"
+            | "redo_workspace_edit"
             | "lsp_servers"
             | "lsp_resend_diagnostics"
             | "recent_projects"
@@ -219,6 +224,7 @@ pub fn restricted_command_allowed(cmd: &str) -> bool {
             | "index_status"
             | "jvm_file_presentations"
             | "deploy_coverage"
+            | "deploy_test_connection"
             | "find_files"
             | "find_symbols"
             | "mark_recent"
@@ -240,6 +246,7 @@ pub fn restricted_command_allowed(cmd: &str) -> bool {
             | "remote_current"
             | "remote_disconnect"
             | "remote_connect"
+            | "remote_bootstrap_list"
             | "remote_list"
             | "remote_open"
             | "remote_of"
@@ -266,6 +273,7 @@ pub fn restricted_command_allowed(cmd: &str) -> bool {
             | "plugin_set_theme"
             | "plugin_set_theme_frame"
             | "plugin_catalog"
+            | "plugin_assets"
             | "notebook_open"
             | "notebook_get"
             | "notebook_edit"

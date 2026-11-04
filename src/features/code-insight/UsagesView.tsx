@@ -54,7 +54,7 @@ export function UsagePreview({ usage }: { usage: Usage }) {
   return (
     <span className={styles.preview}>
       {tokenSpans(text, 0, from, tokens, "b:")}
-      <mark className={styles.match}>{tokenSpans(text, from, to, tokens, "m:")}</mark>
+      <mark className={styles.match}>{text.slice(from, to)}</mark>
       {tokenSpans(text, to, text.length, tokens, "a:")}
     </span>
   );
@@ -230,7 +230,7 @@ export function UsagesView() {
       const path = n.group.path;
       return (
         <span className={clsx(styles.row, isExcluded(n) && styles.excluded)}>
-          <Icon name={fileIconName(basename(path))} size={16} className={styles.icon} />
+          <Icon name={fileIconName(basename(path), path)} size={16} className={styles.icon} />
           <span className={styles.file}>{basename(path)}</span>
           <span className={styles.muted}>{relativeDir(root, path)}</span>
           <span className={styles.count}>
